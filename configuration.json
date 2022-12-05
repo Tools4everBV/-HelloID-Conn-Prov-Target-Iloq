@@ -1,0 +1,62 @@
+[
+  {
+    "key": "BaseUrl",
+    "type": "input",
+    "defaultValue": "",
+    "templateOptions": {
+      "label": "BaseUrl",
+      "description": "The URL to the API.",
+      "required": true
+    }
+  },
+  {
+    "key": "customerCode",
+    "type": "input",
+    "defaultValue": "",
+    "templateOptions": {
+      "label": "Customer Code",
+      "description": "The customer code for the API.",
+      "required": true
+    }
+  },
+  {
+    "key": "userName",
+    "type": "input",
+    "defaultValue": "",
+    "templateOptions": {
+      "label": "User Name",
+      "description": "The user name for the API.",
+      "required": true
+    }
+  },
+  {
+    "key": "password",
+    "type": "input",
+    "defaultValue": "",
+    "templateOptions": {
+      "label": "",
+      "type": "password",
+      "required": false
+    }
+  },
+  {
+    "key": "IsUpdatePerson",
+    "type": "checkbox",
+    "defaultValue": false,
+    "templateOptions": {
+      "label": "Toggle person update",
+      "description": "When toggled, persons in the target system will be updated",
+      "required": false
+    }
+  },
+  {
+    "key": "IsDebug",
+    "type": "checkbox",
+    "defaultValue": true,
+    "templateOptions": {
+      "label": "Toggle debug logging",
+      "description": "When toggled, debug logging will be displayed",
+      "required": false
+    }
+  }
+]
