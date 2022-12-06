@@ -30,9 +30,18 @@
 
 _HelloID-Conn-Prov-Target-iloq_ is a _target_ connector. iloq provides a set of REST API's that allow you to programmatically interact with it's data. The HelloID connector uses the API endpoints listed in the table below.
 
-| Endpoint     | Description |
-| ------------ | ----------- |
-|              |             |
+| Endpoint                                                    | Description                                           |
+| ----------------------------------------------------------- | ----------------------------------------------------- |
+| /api/v2/CreateSession                                       | Create session to make api requests                   |
+| /api/v2/LockGroups                                          | Get lock groups needed to make api requests           |
+| /api/v2/SetLockGroup                                        | Set lock groups needed to make api requests           |
+| /api/v2/Persons/GetByExternalPersonIds/{externalPersonId}   | Get person by external person id                      |
+| /api/v2/Persons/{personId}                                  | Get person by PersonId                                |
+| /api/v2/Persons                                             | Create, update and delete persons                     |
+| /api/v2/Persons/{personId}/Keys                             | Get keys for a specific person                        |
+| /api/v2/Keys/{keyId}/CanReturn                              | Check if the key selected by key id can be returned   |
+| /api/v2/Keys/{keyId}/Return                                 | Return key with specific key id                       |
+| /api/v2/Persons/{personId}/CanDelete                        | Check if person selected by person id can be deleted  | 
 
 ## Getting started
 
