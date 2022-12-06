@@ -1,7 +1,4 @@
-
 # HelloID-Conn-Prov-Target-iloq
-
-
 
 | :warning: Warning |
 |:---------------------------|
@@ -17,31 +14,33 @@
 
 ## Table of contents
 
-- [Introduction](#Introduction)
-- [Getting started](#Getting-started)
-  + [Connection settings](#Connection-settings)
-  + [Prerequisites](#Prerequisites)
-  + [Remarks](#Remarks)
-- [Setup the connector](@Setup-The-Connector)
-- [Getting help](#Getting-help)
-- [HelloID Docs](#HelloID-docs)
-
+- [HelloID-Conn-Prov-Target-iloq](#helloid-conn-prov-target-iloq)
+  - [Table of contents](#table-of-contents)
+  - [Introduction](#introduction)
+  - [Getting started](#getting-started)
+    - [Connection settings](#connection-settings)
+    - [Prerequisites](#prerequisites)
+      - [Creation / correlation process](#creation--correlation-process)
+    - [Remarks](#remarks)
+  - [Getting help](#getting-help)
+  - [HelloID docs](#helloid-docs)
+  
 ## Introduction
 
-_HelloID-Conn-Prov-Target-iloq_ is a _target_ connector. iloq provides a set of REST API's that allow you to programmatically interact with it's data. The HelloID connector uses the API endpoints listed in the table below.
+_HelloID-Conn-Prov-Target-iloq_ is a _target_ connector. iloq provides a set of REST API's that allow you to programmatically interact with its data. The HelloID connector uses the API endpoints listed in the table below.
 
 | Endpoint                                                    | Description                                           |
 | ----------------------------------------------------------- | ----------------------------------------------------- |
-| /api/v2/CreateSession                                       | Create session to make api requests                   |
-| /api/v2/LockGroups                                          | Get lock groups needed to make api requests           |
-| /api/v2/SetLockGroup                                        | Set lock groups needed to make api requests           |
+| /api/v2/CreateSession                                       | Create session to make API requests                   |
+| /api/v2/LockGroups                                          | Get lock groups needed to make API requests           |
+| /api/v2/SetLockGroup                                        | Set lock groups needed to make API requests           |
 | /api/v2/Persons/GetByExternalPersonIds/{externalPersonId}   | Get person by external person id                      |
 | /api/v2/Persons/{personId}                                  | Get person by PersonId                                |
 | /api/v2/Persons                                             | Create, update and delete persons                     |
 | /api/v2/Persons/{personId}/Keys                             | Get keys for a specific person                        |
 | /api/v2/Keys/{keyId}/CanReturn                              | Check if the key selected by key id can be returned   |
 | /api/v2/Keys/{keyId}/Return                                 | Return key with specific key id                       |
-| /api/v2/Persons/{personId}/CanDelete                        | Check if person selected by person id can be deleted  | 
+| /api/v2/Persons/{personId}/CanDelete                        | Check if person selected by person id can be deleted  |
 
 ## Getting started
 
@@ -64,7 +63,7 @@ Before using this connector, make sure you have the appropriate API key to conne
 
 A new functionality is the possibility to update the account in the target system during the correlation process. By default, this behavior is disabled. Meaning, the account will only be created or correlated.
 
-You can change this behavior in the configuration by selecting the IsUpdatePerson field in the configuration
+You can change this behavior in the configuration by selecting the IsUpdatePerson field in the configuration.
 
 > Be aware that this might have unexpected implications.
 
@@ -72,12 +71,11 @@ You can change this behavior in the configuration by selecting the IsUpdatePerso
 
 - There is no enable script.
 
-- When a new user is created, the fields: `eMail, PersonCode, Address` are mandatory. 
-Typically, this data comes from an external system and will be used within iLOQ to connector these fields to groups. However the address field can stay empty
+- When a new user is created, the fields: `eMail, PersonCode, Address` are mandatory.
+Typically, this data comes from an external system. However, the address field can stay empty.
 
-- ZoneId is hardcoded in the connector and needs to be added when creating a user for automization get all zoneId's with the call below if there is only one zoneId suse that otherwise use zoneId with type 4 because that is used as the default zone
-
-- Leave the `Person_ID` field empty this is genereted via the create call in iLOQ 
+- The ZoneId is hardcoded in the connector and needs to be added when creating a new user.<br>
+To get all zoneId's you can use the code listed below. Note that, if there is only one zoneId make sure to use that. Otherwise, use zoneId with type 4 as this is used as the default zone.
 
 ```powershell
 $splatParams = @{
@@ -86,12 +84,13 @@ $splatParams = @{
     Headers     = $headers
     ContentType = 'application/json'
 }
-#if only one zone use that otherwise use zone with type 4 as default
+#if there's only one zone, use that otherwise use zone with type 4 as default 
 $getAllZonesResponse = Invoke-RestMethod @splatParams
 
 $account.ZoneIds += $getAllZonesResponse.Zone_ID
 ```
 
+- Leave the `Person_ID` field empty this is generated via the create call in iLOQ
 
 ## Getting help
 
