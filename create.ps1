@@ -11,7 +11,7 @@ $auditLogs = [System.Collections.Generic.List[PSCustomObject]]::new()
 
 # Account mapping
 $account = [PSCustomObject]@{
-    person = @{
+    person  = @{
         CompanyName       = ''
         ContactInfo       = ''
         Country           = ''
@@ -22,7 +22,7 @@ $account = [PSCustomObject]@{
         FirstName         = $p.Name.GivenName
         LanguageCode      = ''
         LastName          = $p.Name.FamilyName
-        Person_ID         = '' #leave empty Iloq generates this automaticaly
+        Person_ID         = '' #leave empty, a guid will be generated when none exists
         Phone1            = ''
         Phone2            = ''
         Phone3            = ''
@@ -37,8 +37,9 @@ $account = [PSCustomObject]@{
         Address           = ''
     }
 
-    # The ZoneIds are mandatory when creating a new person
-    ZoneIds = @('33669d3f-926b-4d18-b81e-bd56ad1df841')
+    # The ZoneIds are mandatory when creating a new person.
+    # The ZoneId Type 4 is added in the script below. (Get-IloqZoneId)
+    ZoneIds = @()
 }
 
 # Enable TLS1.2
@@ -64,10 +65,10 @@ function Get-IloqSessionId {
         $headers = [System.Collections.Generic.Dictionary[string, string]]::new()
         $headers.Add('Content-Type', 'application/json')
         $params = @{
-            Uri    = "$($config.BaseUrl)/api/v2/CreateSession"
-            Method = 'POST'
+            Uri     = "$($config.BaseUrl)/api/v2/CreateSession"
+            Method  = 'POST'
             Headers = $headers
-            Body = @{
+            Body    = @{
                 'CustomerCode' = $($config.CustomerCode)
                 'UserName'     = $($config.UserName)
                 'Password'     = $($config.Password)
@@ -108,6 +109,75 @@ function Get-IloqLockGroupId {
     }
 }
 
+function Set-IloqResolvedURL {
+    [CmdletBinding()]
+    param (
+        [object]
+        $config
+    )
+    try {
+        [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor [System.Net.SecurityProtocolType]::Tls12
+        $headers = [System.Collections.Generic.Dictionary[string, string]]::new()
+        $headers.Add('Content-Type', 'application/json')
+        $headers.Add('SessionId', $SessionId)
+
+        $splatParams = @{
+            Uri         = "$($config.BaseUrl)/api/v2/Url/GetUrl"
+            Method      = 'POST'
+            ContentType = 'application/json'
+            Body        = @{
+                'CustomerCode' = $($config.CustomerCode)
+            }  | ConvertTo-Json
+        }
+        $resolvedUrl = Invoke-RestMethod @splatParams
+
+        if ([string]::IsNullOrEmpty($resolvedUrl) ) {
+            Write-Verbose "No Resolved - URL found, keep on using the URL provided: $($config.BaseUrl)."
+        } else {
+            Write-Verbose "Resolved - URL found [$resolvedUrl , Using the found url to execute the following requests."
+            $config.BaseUrl =  $resolvedUrl
+        }
+    } catch {
+        $PSCmdlet.ThrowTerminatingError($_)
+    }
+}
+
+function Get-IloqZoneId {
+    [CmdletBinding()]
+    param (
+        [object]
+        $config,
+
+        [string]
+        $SessionId,
+
+        [int]
+        $ZoneIdType
+    )
+    try {
+        [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor [System.Net.SecurityProtocolType]::Tls12
+        $headers = [System.Collections.Generic.Dictionary[string, string]]::new()
+        $headers.Add('Content-Type', 'application/json')
+        $headers.Add('SessionId', $SessionId)
+
+        $splatParams = @{
+            Uri         = "$($config.BaseUrl)/api/v2/Zones"
+            Method      = 'GET'
+            Headers     = $headers
+            ContentType = 'application/json'
+        }
+        # Use zone with type 4 as default
+        $getAllZonesResponse = Invoke-RestMethod @splatParams
+        $zoneId = $getAllZonesResponse | Where-Object { $_.type -eq $ZoneIdType }
+        if ($null -eq $zoneId) {
+            throw 'No valid ZoneId Type [4] found. Please verify for iLoq Configuration'
+        }
+        Write-Output $zoneId
+    } catch {
+        $PSCmdlet.ThrowTerminatingError($_)
+    }
+}
+
 function Set-IloqLockGroup {
     [CmdletBinding()]
     param (
@@ -131,7 +201,7 @@ function Set-IloqLockGroup {
             Uri     = "$($config.BaseUrl)/api/v2/SetLockGroup"
             Method  = 'POST'
             Headers = $headers
-            Body = @{
+            Body    = @{
                 'LockGroup_ID' = $LockGroupId
             } | ConvertTo-Json
         }
@@ -171,6 +241,9 @@ function Resolve-IloqError {
 
 # Begin
 try {
+    # First step is to get the correct url to use for the rest of the API calls.
+    $null =  Set-IloqResolvedURL -Config $config
+
     # Get the Iloq sessionId
     $sessionId = Get-IloqSessionId -Config $config
 
@@ -179,7 +252,7 @@ try {
 
     # Set the Iloq lockGroup in order to make authenticated calls
     $null = Set-IloqLockGroup -Config $config -SessionId $sessionId -LockGroupId $lockGroupId
-    
+
     Write-Verbose 'Adding authorization headers'
     $headers = [System.Collections.Generic.Dictionary[string, string]]::new()
     $headers.Add('Content-Type', 'application/json; charset=utf-8')
@@ -195,12 +268,11 @@ try {
             ContentType = 'application/json'
         }
         $userObject = Invoke-RestMethod @splatParams
-    }
-    catch {
+    } catch {
         $userObject = $null
     }
-    
-    if (-not($userObject)){
+
+    if (-not($userObject)) {
         $action = 'Create-Correlate'
     } elseif ($($config.IsUpdatePerson) -eq 'True') {
         $action = 'Update-Correlate'
@@ -218,6 +290,9 @@ try {
         switch ($action) {
             'Create-Correlate' {
                 Write-Verbose 'Creating and correlating iLOQ account'
+                $account.person.Person_ID = [guid]::NewGuid()
+                $account.ZoneId += (Get-IloqZoneId -Config $config -SessionId $sessionId -ZoneIdType 4 ).Zone_ID
+
                 $splatParams = @{
                     Uri         = "$($config.BaseUrl)/api/v2/Persons"
                     Method      = 'POST'
@@ -238,7 +313,7 @@ try {
                     Uri         = "$($config.BaseUrl)/api/v2/Persons"
                     Method      = 'PUT'
                     Headers     = $headers
-                    Body        = $account| ConvertTo-Json
+                    Body        = $account | ConvertTo-Json
                     ContentType = 'application/json; charset=utf-8'
                 }
                 $null = Invoke-RestMethod @splatParams
@@ -276,7 +351,7 @@ try {
             Message = $auditMessage
             IsError = $true
         })
-# End
+    # End
 } finally {
     $result = [PSCustomObject]@{
         Success          = $success
@@ -285,4 +360,4 @@ try {
         Account          = $account
     }
     Write-Output $result | ConvertTo-Json -Depth 10
-}   
+}

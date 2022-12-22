@@ -143,6 +143,39 @@ function Set-IloqLockGroup {
     }
 }
 
+function Set-IloqResolvedURL {
+    [CmdletBinding()]
+    param (
+        [object]
+        $config
+    )
+    try {
+        [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor [System.Net.SecurityProtocolType]::Tls12
+        $headers = [System.Collections.Generic.Dictionary[string, string]]::new()
+        $headers.Add('Content-Type', 'application/json')
+        $headers.Add('SessionId', $SessionId)
+
+        $splatParams = @{
+            Uri         = "$($config.BaseUrl)/api/v2/Url/GetUrl"
+            Method      = 'POST'
+            ContentType = 'application/json'
+            Body        = @{
+                'CustomerCode' = $($config.CustomerCode)
+            }  | ConvertTo-Json
+        }
+        $resolvedUrl = Invoke-RestMethod @splatParams
+
+        if ([string]::IsNullOrEmpty($resolvedUrl) ) {
+            Write-Verbose "No Resolved - URL found, keep on using the URL provided: $($config.BaseUrl)."
+        } else {
+            Write-Verbose "Resolved - URL found [$resolvedUrl , Using the found url to execute the following requests."
+            $config.BaseUrl =  $resolvedUrl
+        }
+    } catch {
+        $PSCmdlet.ThrowTerminatingError($_)
+    }
+}
+
 function Resolve-IloqError {
     [CmdletBinding()]
     param (
@@ -173,7 +206,11 @@ function Resolve-IloqError {
 
 try {
     Write-Verbose "Updating iLOQ account with accountReference: [$aRef]"
+    
+    # First step is to get the correct url to use for the rest of the API calls.
+    $null =  Set-IloqResolvedURL -Config $config
 
+    # Get the Iloq sessionId
     $sessionId = Get-IloqSessionId -Config $config
 
     # Get the Iloq lockGroupId

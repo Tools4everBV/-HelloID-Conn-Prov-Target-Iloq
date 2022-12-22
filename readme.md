@@ -24,7 +24,7 @@
     - [Remarks](#remarks)
   - [Getting help](#getting-help)
   - [HelloID docs](#helloid-docs)
-  
+
 ## Introduction
 
 _HelloID-Conn-Prov-Target-iloq_ is a _target_ connector. iloq provides a set of REST API's that allow you to programmatically interact with its data. The HelloID connector uses the API endpoints listed in the table below.
@@ -56,8 +56,9 @@ The following settings are required to connect to the API.
 | BaseUrl         | The URL to the API                      | Yes         |
 
 ### Prerequisites
+ - The API requires an additional API iLOQ license, make sure you have the correct License.
+ - Before using this connector, make sure you have the appropriate API key to connect to the API.
 
-Before using this connector, make sure you have the appropriate API key to connect to the API.
 
 #### Creation / correlation process
 
@@ -70,27 +71,11 @@ You can change this behavior in the configuration by selecting the IsUpdatePerso
 ### Remarks
 
 - There is no enable script.
-
 - When a new user is created, the fields: `eMail, PersonCode, Address` are mandatory.
-Typically, this data comes from an external system. However, the address field can stay empty.
-
-- The ZoneId is hardcoded in the connector and needs to be added when creating a new user.<br>
-To get all zoneId's you can use the code listed below. Note that, if there is only one zoneId make sure to use that. Otherwise, use zoneId with type 4 as this is used as the default zone.
-
-```powershell
-$splatParams = @{
-    Uri         = "$($config.BaseUrl)/api/v2/Zones"
-    Method      = 'GET'
-    Headers     = $headers
-    ContentType = 'application/json'
-}
-#if there's only one zone, use that otherwise use zone with type 4 as default 
-$getAllZonesResponse = Invoke-RestMethod @splatParams
-
-$account.ZoneIds += $getAllZonesResponse.Zone_ID
-```
-
-- Leave the `Person_ID` field empty this is generated via the create call in iLOQ
+  Typically, this data comes from an external system. However, the address field can stay empty.
+- Keep in mind when revoke Access Keys of type Phone you cannot monitor the status of phone when returning it, for example when the phone is in flight mode
+- The ZoneId is mandatory when creating a new person. The ZoneId of Type 4 is marked as default, the correct ZoneId from ILOQ is fetched in function: 'Get-IloqZoneId'.
+- Leave the `Person_ID` field empty. The Guid for this is generated in the Create-Correlate
 
 ## Getting help
 
