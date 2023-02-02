@@ -10,27 +10,104 @@ $aRef = $AccountReference | ConvertFrom-Json
 $success = $false
 $auditLogs = [System.Collections.Generic.List[PSCustomObject]]::new()
 
+#Generation of the LastName combined with middleName
+$middleName = $p.Name.familyNamePrefix
+$lastName = $p.Name.familyName;
+$middleNamePartner = $p.Name.familyNamePartnerPrefix
+$lastNamePartner = $p.Name.familyNamePartner
+$nameConvention = $p.Name.Convention
+
+$LastnameFormatted = $null
+
+switch ($nameConvention) {
+    "B" {
+        if (($null -eq $middleName) -Or ($middleName -eq "")){
+            $LastnameFormatted = $lastName
+        } else{
+            $LastnameFormatted = $middleName + " " + $lastName
+        }   
+    }
+    "BP" {
+        if (($null -eq $middleName) -Or ($middleName -eq "")){
+            $LastnameFormatted = $lastName
+        } else{
+            $LastnameFormatted = $middleName + " " + $lastName
+        }
+        if (($null -eq $middleNamePartner) -Or ($middleNamePartner -eq "")){
+            $LastnameFormatted = $LastnameFormatted + " - " + $lastNamePartner
+        } else{
+            $LastnameFormatted = $LastnameFormatted + " - " + $middleNamePartner + " " + $lastNamePartner
+        }    
+    }
+    "P" {
+        if (($null -eq $middleNamePartner) -Or ($middleNamePartner -eq "")){
+            $LastnameFormatted = $lastNamePartner
+        } else{
+            $LastnameFormatted = $middleNamePartner + " " + $lastNamePartner
+        }    
+    }
+    "PB" {
+        if (($null -eq $middleNamePartner) -Or ($middleNamePartner -eq "")){
+            $LastnameFormatted = $lastNamePartner
+        } else{
+            $LastnameFormatted = $middleNamePartner + " " + $lastNamePartner
+        }
+        if (($null -eq $middleName) -Or ($middleName -eq "")){
+            $LastnameFormatted = $LastnameFormatted + " - " + $lastName
+        } else{
+            $LastnameFormatted = $LastnameFormatted + " - " + $middleName + " " + $lastName
+        }    
+    }
+    Default{
+        if (($null -eq $middleName) -Or ($middleName -eq "")){
+            $LastnameFormatted = $lastName
+        } else{
+            $LastnameFormatted = $middleName + " " + $lastName
+        } 
+    }
+}
+
+#Formatting Phone1 (mobile phone, can be customer specific)
+$ContactPhone = $p.Contact.Business.Phone.Mobile
+If(-not ([string]::IsNullOrEmpty($ContactPhone))){
+    $phone1 = $ContactPhone.Replace("-","")
+    $phone1 = "+31" + [String]::Format('{0:#########}',[int]$phone1)
+    $auditLogs.Add([PSCustomObject]@{
+    Action = "UpdateAccount"; #Optionally specify a different action for this audit log
+    Message = "Phone number successfully formatted";
+    IsError = $False;
+    });
+}Else{
+    $phone1 = $null
+    $auditLogs.Add([PSCustomObject]@{
+    Action = "UpdateAccount"; #Optionally specify a different action for this audit log
+    Message = "Phone number not present in person object, set to NULL";
+    IsError = $False;
+    });
+}
+
+
 # Account mapping
 $account = [PSCustomObject]@{
     person = @{
-        CompanyName       = ''
-        ContactInfo       = ''
-        Country           = ''
-        Description       = ''
+        CompanyName       = $p.PrimaryContract.Department.DisplayName
+        ContactInfo       = ""
+        Country           = ""
+        Description       = ""
         EmploymentEndDate = $p.PrimaryContract.EndDate
-        ExternalCanEdit   = ''
+        ExternalCanEdit   = ""
         ExternalPersonId  = $p.ExternalId
-        FirstName         = $p.Name.GivenName
-        LanguageCode      = ''
-        LastName          = $p.Name.FamilyName
+        FirstName         = $p.Name.NickName
+        LanguageCode      = "NL"
+        LastName          = $LastnameFormatted
         Person_ID         = $aRef
-        Phone1            = ''
-        Phone2            = ''
-        Phone3            = ''
-        PostOffice        = ''
-        State             = ''
+        Phone1            = $phone1
+        Phone2            = ""
+        Phone3            = ""
+        PostOffice        = ""
+        State             = ""
         WorkTitle         = $p.PrimaryContract.Title.Name
-        ZipCode           = ''
+        ZipCode           = ""
 
         # Mandatory fields
         eMail             = $p.Contact.Business.Email
@@ -320,4 +397,4 @@ finally {
         Auditlogs = $auditLogs
     }
     Write-Output $result | ConvertTo-Json -Depth 10
-}
+ }

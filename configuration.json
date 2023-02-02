@@ -20,6 +20,16 @@
     }
   },
   {
+    "key": "defaultZoneId",
+    "type": "input",
+    "defaultValue": "",
+    "templateOptions": {
+      "label": "Default ZoneId",
+      "description": "The default ZoneId",
+      "required": true
+    }
+  },
+  {
     "key": "userName",
     "type": "input",
     "defaultValue": "",
@@ -34,7 +44,7 @@
     "type": "input",
     "defaultValue": "",
     "templateOptions": {
-      "label": "",
+      "label": "Password",
       "type": "password",
       "required": false
     }

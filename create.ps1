@@ -9,32 +9,110 @@ $p = $person | ConvertFrom-Json
 $success = $false
 $auditLogs = [System.Collections.Generic.List[PSCustomObject]]::new()
 
+$ZoneID = $config.defaultZoneId
+
+#Generation of the LastName combined with middleName
+$middleName = $p.Name.familyNamePrefix
+$lastName = $p.Name.familyName;
+$middleNamePartner = $p.Name.familyNamePartnerPrefix
+$lastNamePartner = $p.Name.familyNamePartner
+$nameConvention = $p.Name.Convention
+
+$LastnameFormatted = $null
+
+switch ($nameConvention) {
+    "B" {
+        if (($null -eq $middleName) -Or ($middleName -eq "")){
+            $LastnameFormatted = $lastName
+        } else{
+            $LastnameFormatted = $middleName + " " + $lastName
+        }   
+    }
+    "BP" {
+        if (($null -eq $middleName) -Or ($middleName -eq "")){
+            $LastnameFormatted = $lastName
+        } else{
+            $LastnameFormatted = $middleName + " " + $lastName
+        }
+        if (($null -eq $middleNamePartner) -Or ($middleNamePartner -eq "")){
+            $LastnameFormatted = $LastnameFormatted + " - " + $lastNamePartner
+        } else{
+            $LastnameFormatted = $LastnameFormatted + " - " + $middleNamePartner + " " + $lastNamePartner
+        }    
+    }
+    "P" {
+        if (($null -eq $middleNamePartner) -Or ($middleNamePartner -eq "")){
+            $LastnameFormatted = $lastNamePartner
+        } else{
+            $LastnameFormatted = $middleNamePartner + " " + $lastNamePartner
+        }    
+    }
+    "PB" {
+        if (($null -eq $middleNamePartner) -Or ($middleNamePartner -eq "")){
+            $LastnameFormatted = $lastNamePartner
+        } else{
+            $LastnameFormatted = $middleNamePartner + " " + $lastNamePartner
+        }
+        if (($null -eq $middleName) -Or ($middleName -eq "")){
+            $LastnameFormatted = $LastnameFormatted + " - " + $lastName
+        } else{
+            $LastnameFormatted = $LastnameFormatted + " - " + $middleName + " " + $lastName
+        }    
+    }
+    Default{
+        if (($null -eq $middleName) -Or ($middleName -eq "")){
+            $LastnameFormatted = $lastName
+        } else{
+            $LastnameFormatted = $middleName + " " + $lastName
+        } 
+    }
+}
+
+#Formatting Phone1 (mobile)
+$ContactPhone = $p.Contact.Business.Phone.Mobile
+If(-not ([string]::IsNullOrEmpty($ContactPhone))){
+    $phone1 = $ContactPhone.Replace("-","")
+    $phone1 = "+31" + [String]::Format('{0:#########}',[int]$phone1)
+    $auditLogs.Add([PSCustomObject]@{
+    Action = "CreateAccount"; #Optionally specify a different action for this audit log
+    Message = "Phone number successfully formatted";
+    IsError = $False;
+    });
+}Else{
+    $phone1 = $null
+    $auditLogs.Add([PSCustomObject]@{
+    Action = "CreateAccount"; #Optionally specify a different action for this audit log
+    Message = "Phone number not present in person object, set to NULL";
+    IsError = $False;
+    });
+}
+
 # Account mapping
 $account = [PSCustomObject]@{
     person  = @{
-        CompanyName       = ''
-        ContactInfo       = ''
-        Country           = ''
-        Description       = ''
+        CompanyName       = $p.PrimaryContract.Department.DisplayName
+        ContactInfo       = ""
+        Country           = ""
+        Description       = ""
         EmploymentEndDate = $p.PrimaryContract.EndDate
-        ExternalCanEdit   = ''
+        ExternalCanEdit   = ""
         ExternalPersonId  = $p.ExternalId
-        FirstName         = $p.Name.GivenName
-        LanguageCode      = ''
-        LastName          = $p.Name.FamilyName
-        Person_ID         = '' #leave empty, a guid will be generated when none exists
-        Phone1            = ''
-        Phone2            = ''
-        Phone3            = ''
-        PostOffice        = ''
-        State             = ''
+        FirstName         = $p.Name.NickName
+        LanguageCode      = "NL"
+        LastName          = $LastnameFormatted
+        Person_ID         = "" #leave empty, a guid will be generated when none exists
+        Phone1            = $phone1
+        Phone2            = ""
+        Phone3            = ""
+        PostOffice        = ""
+        State             = ""
         WorkTitle         = $p.PrimaryContract.Title.Name
-        ZipCode           = ''
+        ZipCode           = ""
 
         # Mandatory fields
         eMail             = $p.Contact.Business.Email
         PersonCode        = $p.ExternalId
-        Address           = ''
+        Address           = ""
     }
 
     # The ZoneIds are mandatory when creating a new person.
@@ -58,7 +136,7 @@ function Get-IloqSessionId {
         [object]
         $config
     )
-
+    
     try {
         [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor [System.Net.SecurityProtocolType]::Tls12
 
@@ -168,6 +246,7 @@ function Get-IloqZoneId {
         }
         # Use zone with type 4 as default
         $getAllZonesResponse = Invoke-RestMethod @splatParams
+        Write-Verbose $($getAllZonesResponse) -verbose
         $zoneId = $getAllZonesResponse | Where-Object { $_.type -eq $ZoneIdType }
         if ($null -eq $zoneId) {
             throw 'No valid ZoneId Type [4] found. Please verify for iLoq Configuration'
@@ -268,6 +347,7 @@ try {
             ContentType = 'application/json'
         }
         $userObject = Invoke-RestMethod @splatParams
+        Write-Verbose $($userObject) -verbose
     } catch {
         $userObject = $null
     }
@@ -286,12 +366,13 @@ try {
     }
 
     # Process
-    if (-not($dryRun -eq $true)) {
+    if (-not($dryRun -eq $True)) {
         switch ($action) {
             'Create-Correlate' {
                 Write-Verbose 'Creating and correlating iLOQ account'
                 $account.person.Person_ID = [guid]::NewGuid()
-                $account.ZoneId += (Get-IloqZoneId -Config $config -SessionId $sessionId -ZoneIdType 4 ).Zone_ID
+                $resolveZoneID = Get-IloqZoneId -Config $config -SessionId $sessionId -ZoneIdType $ZoneID 
+                $account.ZoneIds += $resolveZoneID.Zone_ID
 
                 $splatParams = @{
                     Uri         = "$($config.BaseUrl)/api/v2/Persons"
