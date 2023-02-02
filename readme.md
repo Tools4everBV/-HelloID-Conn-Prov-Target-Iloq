@@ -70,7 +70,7 @@ You can change this behavior in the configuration by selecting the IsUpdatePerso
 
 ### Remarks
 
-- There is no enable script.
+- There is no enable script. don't forget to give out the account_access entitlement otherwise you can't disable the user
 - When a new user is created, the fields: `eMail, PersonCode, Address` are mandatory.
   Typically, this data comes from an external system. However, the address field can stay empty.
 - Keep in mind when revoke Access Keys of type Phone you cannot monitor the status of phone when returning it, for example when the phone is in flight mode
