@@ -57,6 +57,7 @@ The following settings are required to connect to the API.
 
 ### Prerequisites
  - The API requires an additional API iLOQ license, make sure you have the correct License.
+ - Please make sure that the API user has the correct right, the user must be able to read all the data from all the userzones.
  - Before using this connector, make sure you have the appropriate API key to connect to the API.
 
 
