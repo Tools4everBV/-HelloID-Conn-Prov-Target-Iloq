@@ -246,7 +246,7 @@ function Get-IloqZoneId {
         }
         # Use zone with type 4 as default
         $getAllZonesResponse = Invoke-RestMethod @splatParams
-        Write-Verbose $($getAllZonesResponse) -verbose
+        # Write-Verbose $($getAllZonesResponse) -verbose
         $zoneId = $getAllZonesResponse | Where-Object { $_.type -eq $ZoneIdType }
         if ($null -eq $zoneId) {
             throw 'No valid ZoneId Type [4] found. Please verify for iLoq Configuration'
@@ -347,7 +347,7 @@ try {
             ContentType = 'application/json'
         }
         $userObject = Invoke-RestMethod @splatParams
-        Write-Verbose $($userObject) -verbose
+        # Write-Verbose $($userObject) -verbose
     } catch {
         $userObject = $null
     }
