@@ -1,4 +1,4 @@
-#################################################### 
+####################################################
 # HelloID-Conn-Prov-Target-Iloq-Create
 #
 # Version: 1.0.0
@@ -26,7 +26,7 @@ switch ($nameConvention) {
             $LastnameFormatted = $lastName
         } else{
             $LastnameFormatted = $middleName + " " + $lastName
-        }   
+        }
     }
     "BP" {
         if (($null -eq $middleName) -Or ($middleName -eq "")){
@@ -38,14 +38,14 @@ switch ($nameConvention) {
             $LastnameFormatted = $LastnameFormatted + " - " + $lastNamePartner
         } else{
             $LastnameFormatted = $LastnameFormatted + " - " + $middleNamePartner + " " + $lastNamePartner
-        }    
+        }
     }
     "P" {
         if (($null -eq $middleNamePartner) -Or ($middleNamePartner -eq "")){
             $LastnameFormatted = $lastNamePartner
         } else{
             $LastnameFormatted = $middleNamePartner + " " + $lastNamePartner
-        }    
+        }
     }
     "PB" {
         if (($null -eq $middleNamePartner) -Or ($middleNamePartner -eq "")){
@@ -57,14 +57,14 @@ switch ($nameConvention) {
             $LastnameFormatted = $LastnameFormatted + " - " + $lastName
         } else{
             $LastnameFormatted = $LastnameFormatted + " - " + $middleName + " " + $lastName
-        }    
+        }
     }
     Default{
         if (($null -eq $middleName) -Or ($middleName -eq "")){
             $LastnameFormatted = $lastName
         } else{
             $LastnameFormatted = $middleName + " " + $lastName
-        } 
+        }
     }
 }
 
@@ -136,7 +136,7 @@ function Get-IloqSessionId {
         [object]
         $config
     )
-    
+
     try {
         [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor [System.Net.SecurityProtocolType]::Tls12
 
@@ -213,7 +213,7 @@ function Set-IloqResolvedURL {
             Write-Verbose "No Resolved - URL found, keep on using the URL provided: $($config.BaseUrl)."
         } else {
             Write-Verbose "Resolved - URL found [$resolvedUrl , Using the found url to execute the following requests."
-            $config.BaseUrl =  $resolvedUrl
+            $config.BaseUrl = $resolvedUrl
         }
     } catch {
         $PSCmdlet.ThrowTerminatingError($_)
@@ -246,7 +246,6 @@ function Get-IloqZoneId {
         }
         # Use zone with type 4 as default
         $getAllZonesResponse = Invoke-RestMethod @splatParams
-        # Write-Verbose $($getAllZonesResponse) -verbose
         $zoneId = $getAllZonesResponse | Where-Object { $_.type -eq $ZoneIdType }
         if ($null -eq $zoneId) {
             throw 'No valid ZoneId Type [4] found. Please verify for iLoq Configuration'
@@ -316,12 +315,99 @@ function Resolve-IloqError {
         Write-Output $httpErrorObj
     }
 }
+function Invoke-UpdateILoqAccesskeyEnddateIfRequired {
+    [CmdletBinding()]
+    param(
+        [string]
+        [Parameter(Mandatory)]
+        $PersonId,
+
+        [Parameter(Mandatory)]
+        $Headers,
+
+        [Parameter()]
+        $Enddate,
+
+        [ref]
+        [Parameter(Mandatory)]
+        $AuditLogs
+    )
+    try {
+        Write-Verbose 'Verifying if an Iloq account has access keys assigned'
+        $splatParams = @{
+            Uri         = "$($config.BaseUrl)/api/v2/Persons/$($PersonId)/Keys"
+            Method      = 'GET'
+            Headers     = $Headers
+            ContentType = 'application/json; charset=utf-8'
+        }
+        $responseKeys = Invoke-RestMethod @splatParams -Verbose:$false
+
+        if ($responseKeys.keys.Length -eq 0) {
+            Write-Verbose  "No Keys assigned to Person: [$($responseUser.PersonCode)] Aref: [$($PersonId)]"
+
+        } else {
+            Write-Verbose "Checking if the end date needs to be updated for the assigned access keys [$($responseKeys.Keys.Description -join ', ')]"
+            foreach ($key in $responseKeys.Keys) {
+                if (Confirm-IsUpdateRequiredEnddateKey -NewEndDate $Enddate -CurrentEnddate $key.ExpireDate) {
+                    Write-Verbose "Enddate Update required of AccessKey [$($key.Description)]"
+
+                    if ($dryRun -eq $true) {
+                        Write-Warning "[DryRun] Update enddate AccessKey: [$($key.Description)] will be executed during enforcement"
+                        Write-Verbose "Current Enddate [$($key.ExpireDate)] New Enddate: [$(if ($null -eq $($Enddate)) {'Null'} else {$Enddate})]"
+                    }
+                    if (-not($dryRun -eq $true)) {
+                        $key.ExpireDate = $Enddate
+                        $bodyKey = @{
+                            Key = $key
+                        } | ConvertTo-Json
+
+                        $splatParams = @{
+                            Uri         = "$($config.BaseUrl)/api/v2/Keys"
+                            Method      = 'PUT'
+                            Headers     = $Headers
+                            Body        = $bodyKey
+                            ContentType = 'application/json; charset=utf-8'
+                        }
+                        $null = Invoke-RestMethod @splatParams -Verbose:$false
+                        Write-Verbose "Updated endate of AccessKey: [$($key.Description)]. New Enddate is [$(if ($null -eq $($key.ExpireDate)) {'Null'} else {$key.ExpireDate})]"
+
+                        $AuditLogs.Value.Add([PSCustomObject]@{
+                                Action  = 'UpdateAccount'
+                                Message = "Update enddate AccessKey: [$($key.Description)] was successful"
+                                IsError = $false
+                            })
+                    }
+                }
+            }
+        }
+    } catch {
+        Write-Warning "Could not update AccessKey for person [$($responseUser.PersonCode)] Error: $($_)"
+    }
+}
+
+function Confirm-IsUpdateRequiredEnddateKey {
+    [CmdletBinding()]
+    param(
+        $NewEndDate,
+        $CurrentEnddate
+    )
+    if ($null -ne $NewEndDate) {
+        $_enddate = ([Datetime]$NewEndDate).ToShortDateString()
+    }
+    if ($null -ne $key.ExpireDate) {
+        $_currentEnddate = ([Datetime]$CurrentEnddate).ToShortDateString()
+    }
+    if ($_currentEnddate -ne $_enddate) {
+        Write-Output $true
+    }
+}
+
 #endregion
 
 # Begin
 try {
     # First step is to get the correct url to use for the rest of the API calls.
-    $null =  Set-IloqResolvedURL -Config $config
+    $null = Set-IloqResolvedURL -Config $config
 
     # Get the Iloq sessionId
     $sessionId = Get-IloqSessionId -Config $config
@@ -347,7 +433,6 @@ try {
             ContentType = 'application/json'
         }
         $userObject = Invoke-RestMethod @splatParams
-        # Write-Verbose $($userObject) -verbose
     } catch {
         $userObject = $null
     }
@@ -371,7 +456,7 @@ try {
             'Create-Correlate' {
                 Write-Verbose 'Creating and correlating iLOQ account'
                 $account.person.Person_ID = [guid]::NewGuid()
-                $resolveZoneID = Get-IloqZoneId -Config $config -SessionId $sessionId -ZoneIdType $ZoneID 
+                $resolveZoneID = Get-IloqZoneId -Config $config -SessionId $sessionId -ZoneIdType $ZoneID
                 $account.ZoneIds += $resolveZoneID.Zone_ID
 
                 $splatParams = @{
@@ -388,7 +473,7 @@ try {
             }
 
             'Update-Correlate' {
-                Write-Verbose 'Updating and correlating iLOQ account'*
+                Write-Verbose 'Updating and correlating iLOQ account'
                 $account.person.Person_ID = $userObject.Person_ID
                 $splatParams = @{
                     Uri         = "$($config.BaseUrl)/api/v2/Persons"
@@ -400,6 +485,17 @@ try {
                 $null = Invoke-RestMethod @splatParams
 
                 $accountReference = $userObject.Person_ID
+                # Updating the end date of the access key is a separate process that does not update the person itself, but only the assigned access keys.
+                # Therefore, this is encapsulated in a single function with its own audit logging. When an exception occurs, only a warning is shown,
+                # so it does not disrupt the account update process.
+                # Note that a preview run is not possible, because there is an account reference required!
+                $splatUpdateAccesskeyEnddateIfRequired = @{
+                    PersonId  = $accountReference
+                    Headers   = $headers
+                    Enddate   = $p.PrimaryContract.Enddate
+                    AuditLogs = ([ref]$auditLogs)
+                }
+                $null = Invoke-UpdateILoqAccesskeyEnddateIfRequired @splatUpdateAccesskeyEnddateIfRequired
                 break
             }
 

@@ -22,6 +22,7 @@
     - [Prerequisites](#prerequisites)
       - [Creation / correlation process](#creation--correlation-process)
     - [Remarks](#remarks)
+      - [Permissions Remarks](#permissions-remarks)
   - [Getting help](#getting-help)
   - [HelloID docs](#helloid-docs)
 
@@ -59,7 +60,7 @@ The following settings are required to connect to the API.
  - The API requires an additional API iLOQ license, make sure you have the correct License.
  - Please make sure that the API user has the correct right, the user must be able to read all the data from all the userzones.
  - Before using this connector, make sure you have the appropriate API key to connect to the API.
-
+ - Ensure that the Concurrent Action limit is set to one, as the grant or revoke process for a single user cannot be performed simultaneously. It can result in occasional instances where permissions are not granted.
 
 #### Creation / correlation process
 
@@ -71,12 +72,26 @@ You can change this behavior in the configuration by selecting the IsUpdatePerso
 
 ### Remarks
 
-- There is no enable script. don't forget to give out the account_access entitlement otherwise you can't disable the user
+- There is no enable script. Don't forget to give out the account_access entitlement otherwise you can't disable the user
 - When a new user is created, the fields: `eMail, PersonCode, Address` are mandatory.
   Typically, this data comes from an external system. However, the address field can stay empty.
 - Keep in mind when revoke Access Keys of type Phone you cannot monitor the status of phone when returning it, for example when the phone is in flight mode
-- The ZoneId is mandatory when creating a new person. The ZoneId of Type 4 is marked as default, the correct ZoneId from ILOQ is fetched in function: 'Get-IloqZoneId'.
-- Leave the `Person_ID` field empty. The Guid for this is generated in the Create-Correlate
+- The ZoneId is mandatory when creating a new person. The ZoneId of Type 4 is marked as default, the correct ZoneId from iLOQ is fetched in function: 'Get-IloqZoneId'.
+- Leave the `Person_ID` field empty. The GUID for this is generated in the Create-Correlate
+- The Enddate of the AccessKey is kept in sync with the person's primary contract enddate to ensure that it is always up-to-date. An additional check is run in some sort of extra process in the following HelloId Actions: Create, Update, Grant, and Revoke. This check verifies if the accessKey enddate differs from the enddate of the primary contract, and if so, it updates the enddate on the access key. This is done on all the access keys assigned to the person. Because this process is slightly different from the normal Account LifeCycle or managing permissions, it does not throw termination errors but instead adds a warning to the process logging. (Of course, this can be changed.)
+
+
+#### Permissions Remarks
+The permissions of an access key system vary between vendors. For iLOQ, it is implemented as follows: a person is linked to an access key, and the permissions (security accesses) are granted to the access key itself. Additionally, a person's link to an access key is a one-to-many relationship, meaning that a single person can have multiple access keys assigned.
+The connector process for managing access keys involves the creation of user accounts and the management of permissions using HelloId. However, establishing the link between a person and their access key(s) cannot be automated, and requires a manual handover of the key to the employee. Consequently, it is recommended to introduce a period of time between the creation of the user account and the granting of permissions by implementing HelloId Business Rules.
+
+- To grant permission, the grant script checks if an access key has been assigned to the person. If an access key is not found, the script stops will retry each enforcement until an access key is assigned to the person. This ensures that the "issue" is resolved automatically.
+ - The permissions script retrieves the available Security Accesses, which are the permissions that can be assigned to the access key. *(Currently, the SecurityAccesses are filtered on Type 1, as not all types function as expected. However, this filtering approach may vary depending on the specific environment.)*
+ - The grant or revoke permissions process will update only the specified permission and leave all other existing permissions unchanged. Therefore, no additional synchronization will be performed to ensure that the SecurityAccesses on multiple keys remain in sync with each other.
+ - In addition, of the previous remark. In cases where an additional, lost, stolen, or otherwise replaced key is handed over to an employee, the granted SecurityAccesses must be **manually copied from the previous key** to ensure that it can be used directly.
+ - The grant or revoke permissions process is created to set the specified permissions for all access keys assigned to a user.
+ - When a person has multiple keys assigned, the granted permissions for each key are displayed as sub-permissions in the entitlement overview.
+
 
 ## Getting help
 
