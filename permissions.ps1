@@ -233,7 +233,7 @@ try {
     $securityAccesses = Invoke-RestMethod @splatParams  -Verbose:$false
 
     # foreach ($permission in $securityAccesses) {
-    foreach ($permission in $securityAccesses | Where-Object { $_.Type -eq 1 }) {
+    foreach ($permission in $securityAccesses | Where-Object { $_.Type -eq 3 }) {
         @{
             DisplayName    = $permission.Name
             Identification = @{
