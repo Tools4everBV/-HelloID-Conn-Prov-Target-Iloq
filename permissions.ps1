@@ -134,10 +134,9 @@ function Get-IloqZoneId {
         }
         # Use zone with type 4 as default
         $getAllZonesResponse = Invoke-RestMethod @splatParams  -Verbose:$false
-        Write-Verbose $($getAllZonesResponse) -verbose
         $zoneId = $getAllZonesResponse | Where-Object { $_.type -eq $ZoneIdType }
         if ($null -eq $zoneId) {
-            throw 'No valid ZoneId Type [4] found. Please verify for iLoq Configuration'
+            throw 'No valid ZoneId Type [4] found. Please verify for iLOQ Configuration'
         }
         Write-Output $zoneId
     } catch {
@@ -210,13 +209,13 @@ try {
     # First step is to get the correct url to use for the rest of the API calls.
     $null = Set-IloqResolvedURL -Config $config
 
-    # Get the Iloq sessionId
+    # Get the iLOQ sessionId
     $sessionId = Get-IloqSessionId -Config $config
 
-    # Get the Iloq lockGroupId
+    # Get the iLOQ lockGroupId
     $lockGroupId = Get-IloqLockGroupId -Config $config -SessionId $sessionId
 
-    # Set the Iloq lockGroup in order to make authenticated calls
+    # Set the iLOQ lockGroup in order to make authenticated calls
     $null = Set-IloqLockGroup -Config $config -SessionId $sessionId -LockGroupId $lockGroupId
 
     Write-Verbose 'Adding authorization headers'
@@ -248,10 +247,10 @@ try {
     if ($($ex.Exception.GetType().FullName -eq 'Microsoft.PowerShell.Commands.HttpResponseException') -or
         $($ex.Exception.GetType().FullName -eq 'System.Net.WebException')) {
         $errorObj = Resolve-IloqError -ErrorObject $ex
-        $auditMessage = "Could not retrieve Iloq permissions. Error: $($errorObj.FriendlyMessage)"
+        $auditMessage = "Could not retrieve iLOQ permissions. Error: $($errorObj.FriendlyMessage)"
         Write-Verbose "Error at Line '$($errorObj.ScriptLineNumber)': $($errorObj.Line). Error: $($errorObj.ErrorDetails)"
     } else {
-        $auditMessage = "Could not retrieve Iloq permissions. Error: $($ex.Exception.Message)"
+        $auditMessage = "Could not retrieve iLOQ permissions. Error: $($ex.Exception.Message)"
         Write-Verbose "Error at Line '$($ex.InvocationInfo.ScriptLineNumber)': $($ex.InvocationInfo.Line). Error: $($ex.Exception.Message)"
     }
     $auditLogs.Add([PSCustomObject]@{

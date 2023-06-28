@@ -28,7 +28,7 @@
 
 ## Introduction
 
-_HelloID-Conn-Prov-Target-iloq_ is a _target_ connector. iloq provides a set of REST API's that allow you to programmatically interact with its data. The HelloID connector uses the API endpoints listed in the table below.
+_HelloID-Conn-Prov-Target-iloq_ is a _target_ connector. iLOQ provides a set of REST API's that allow you to programmatically interact with its data. The HelloID connector uses the API endpoints listed in the table below.
 
 | Endpoint                                                    | Description                                           |
 | ----------------------------------------------------------- | ----------------------------------------------------- |

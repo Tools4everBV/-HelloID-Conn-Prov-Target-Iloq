@@ -141,10 +141,9 @@ function Get-IloqZoneId {
         }
         # Use zone with type 4 as default
         $getAllZonesResponse = Invoke-RestMethod @splatParams  -Verbose:$false
-        Write-Verbose $($getAllZonesResponse) -verbose
         $zoneId = $getAllZonesResponse | Where-Object { $_.type -eq $ZoneIdType }
         if ($null -eq $zoneId) {
-            throw 'No valid ZoneId Type [4] found. Please verify for iLoq Configuration'
+            throw 'No valid ZoneId Type [4] found. Please verify for iLOQ Configuration'
         }
         Write-Output $zoneId
     } catch {
@@ -354,7 +353,7 @@ function Confirm-UpdateRequiredExpireDate {
 # Begin
 try {
     try {
-        Write-Verbose "Verifying if a Iloq account for [$($p.DisplayName)] exists"
+        Write-Verbose "Verifying if a iLOQ account for [$($p.DisplayName)] exists"
         if ($null -eq $aRef) {
             $dryRunMessage = 'No account Reference found. Skipping Action'
             $action = 'ARefNotFound'
@@ -378,12 +377,12 @@ try {
             }
             $responseUser = Invoke-RestMethod @splatParams -Verbose:$false
             $action = 'Found'
-            $dryRunMessage = "Revoke Iloq entitlement: [$($pRef.DisplayName)] to: [$($p.DisplayName)] will be executed during enforcement"
+            $dryRunMessage = "Revoke iLOQ entitlement: [$($pRef.DisplayName)] to: [$($p.DisplayName)] will be executed during enforcement"
         }
     } catch {
         if ($_.ErrorDetails.Message -match 'Invalid value *') {
             $action = 'NotFound'
-            $dryRunMessage = "Iloq account for: [$($p.DisplayName)] not found. Possibly already deleted. Skipping action"
+            $dryRunMessage = "iLOQ account for: [$($p.DisplayName)] not found. Possibly already deleted. Skipping action"
         } else {
             throw $_
         }
@@ -398,7 +397,7 @@ try {
 
     switch ($action) {
         'Found' {
-            Write-Verbose 'Verifying if an Iloq account has access keys assigned'
+            Write-Verbose 'Verifying if an iLOQ account has access keys assigned'
             $splatParams = @{
                 Uri         = "$($config.BaseUrl)/api/v2/Persons/$($aRef)/Keys"
                 Method      = 'GET'
@@ -413,7 +412,7 @@ try {
                         IsError = $false
                     })
             } else {
-                Write-Verbose "Revoking Iloq entitlement: [$($pRef.DisplayName)]"
+                Write-Verbose "Revoking iLOQ entitlement: [$($pRef.DisplayName)]"
                 foreach ($key in $responseKeys.Keys) {
                     # Updating Expire Date
                     $splatIloqAccessKeyExpireDate = @{
@@ -449,7 +448,7 @@ try {
                                 }
                                 $null = Invoke-RestMethod @splatParams -Verbose:$false
                                 $auditLogs.Add([PSCustomObject]@{
-                                    Message = "Revoke Iloq entitlement: [$($pRef.DisplayName)] from key: [$($key.Description)] was successful"
+                                    Message = "Revoke iLOQ entitlement: [$($pRef.DisplayName)] from key: [$($key.Description)] was successful"
                                     IsError = $false
                                 })
                             }
@@ -457,14 +456,14 @@ try {
                         }
                         2 {
                             $auditLogs.Add([PSCustomObject]@{
-                                    Message = "Could not revoke Iloq Key [$($key.Description)]. Key is in unmodifiable state, for ex. blacklisted."
+                                    Message = "Could not revoke iLOQ Key [$($key.Description)]. Key is in unmodifiable state, for ex. blacklisted."
                                     IsError = $true
                                 })
                             break
                         }
                         3 {
                             $auditLogs.Add([PSCustomObject]@{
-                                    Message = "Revoke Iloq entitlement [$($pRef.DisplayName)] from Key [$($key.Description)] was successful. Security Access link already removed"
+                                    Message = "Revoke iLOQ entitlement [$($pRef.DisplayName)] from Key [$($key.Description)] was successful. Security Access link already removed"
                                     IsError = $false
                                 })
                             break
@@ -516,7 +515,7 @@ try {
                             }
                             Write-Verbose "$($canOrderAuditMessage)"
                             $auditLogs.Add([PSCustomObject]@{
-                                    Message = "Could not grant Iloq entitlement [$($pRef.DisplayName)] to key: [$($key.Description)]. $($canOrderAuditMessage)"
+                                    Message = "Could not grant iLOQ entitlement [$($pRef.DisplayName)] to key: [$($key.Description)]. $($canOrderAuditMessage)"
                                     IsError = $true
                                 })
                         }
@@ -527,7 +526,7 @@ try {
         'NotFound' {
             $success = $true
             $auditLogs.Add([PSCustomObject]@{
-                    Message = "Iloq account for: [$($p.DisplayName)] not found. Possibly already deleted. Skipping action"
+                    Message = "iLOQ account for: [$($p.DisplayName)] not found. Possibly already deleted. Skipping action"
                     IsError = $false
                 })
             break
@@ -551,10 +550,10 @@ try {
     if ($($ex.Exception.GetType().FullName -eq 'Microsoft.PowerShell.Commands.HttpResponseException') -or
         $($ex.Exception.GetType().FullName -eq 'System.Net.WebException')) {
         $errorObj = Resolve-IloqError -ErrorObject $ex
-        $auditMessage = "Could not revoke Iloq entitlement. Error: $($errorObj.FriendlyMessage)"
+        $auditMessage = "Could not revoke iLOQ entitlement. Error: $($errorObj.FriendlyMessage)"
         Write-Verbose "Error at Line '$($errorObj.ScriptLineNumber)': $($errorObj.Line). Error: $($errorObj.ErrorDetails)"
     } else {
-        $auditMessage = "Could not revoke Iloq entitlement. Error: $($ex.Exception.Message)"
+        $auditMessage = "Could not revoke iLOQ entitlement. Error: $($ex.Exception.Message)"
         Write-Verbose "Error at Line '$($ex.InvocationInfo.ScriptLineNumber)': $($ex.InvocationInfo.Line). Error: $($ex.Exception.Message)"
     }
     $auditLogs.Add([PSCustomObject]@{

@@ -1,5 +1,5 @@
 ####################################################
-# HelloID-Conn-Prov-Target-Iloq-Create
+# HelloID-Conn-Prov-Target-iLOQ-Create
 #
 # Version: 1.0.0
 #####################################################
@@ -72,19 +72,9 @@ switch ($nameConvention) {
 $ContactPhone = $p.Contact.Business.Phone.Mobile
 If(-not ([string]::IsNullOrEmpty($ContactPhone))){
     $phone1 = $ContactPhone.Replace("-","")
-    $phone1 = "+31" + [String]::Format('{0:#########}',[int]$phone1)
-    $auditLogs.Add([PSCustomObject]@{
-    Action = "CreateAccount"; #Optionally specify a different action for this audit log
-    Message = "Phone number successfully formatted";
-    IsError = $False;
-    });
+    $phone1 = "+31" + [String]::Format('{0:#########}',[int]$phone1);
 }Else{
-    $phone1 = $null
-    $auditLogs.Add([PSCustomObject]@{
-    Action = "CreateAccount"; #Optionally specify a different action for this audit log
-    Message = "Phone number not present in person object, set to NULL";
-    IsError = $False;
-    });
+    $phone1 = $null;
 }
 
 # Account mapping
@@ -152,7 +142,7 @@ function Get-IloqSessionId {
                 'Password'     = $($config.Password)
             } | ConvertTo-Json
         }
-        $response = Invoke-RestMethod @params
+        $response = Invoke-RestMethod @params -Verbose:$false
         Write-Output $response.SessionID
     } catch {
         $PSCmdlet.ThrowTerminatingError($_)
@@ -180,7 +170,7 @@ function Get-IloqLockGroupId {
             Method  = 'GET'
             Headers = $headers
         }
-        $response = Invoke-RestMethod @params
+        $response = Invoke-RestMethod @params -Verbose:$false
         Write-Output $response.LockGroup_ID
     } catch {
         $PSCmdlet.ThrowTerminatingError($_)
@@ -207,7 +197,7 @@ function Set-IloqResolvedURL {
                 'CustomerCode' = $($config.CustomerCode)
             }  | ConvertTo-Json
         }
-        $resolvedUrl = Invoke-RestMethod @splatParams
+        $resolvedUrl = Invoke-RestMethod @splatParams -Verbose:$false
 
         if ([string]::IsNullOrEmpty($resolvedUrl) ) {
             Write-Verbose "No Resolved - URL found, keep on using the URL provided: $($config.BaseUrl)."
@@ -245,10 +235,10 @@ function Get-IloqZoneId {
             ContentType = 'application/json'
         }
         # Use zone with type 4 as default
-        $getAllZonesResponse = Invoke-RestMethod @splatParams
+        $getAllZonesResponse = Invoke-RestMethod @splatParams -Verbose:$false
         $zoneId = $getAllZonesResponse | Where-Object { $_.type -eq $ZoneIdType }
         if ($null -eq $zoneId) {
-            throw 'No valid ZoneId Type [4] found. Please verify for iLoq Configuration'
+            throw 'No valid ZoneId Type [4] found. Please verify for iLOQ Configuration'
         }
         Write-Output $zoneId
     } catch {
@@ -283,7 +273,7 @@ function Set-IloqLockGroup {
                 'LockGroup_ID' = $LockGroupId
             } | ConvertTo-Json
         }
-        $response = Invoke-RestMethod @params
+        $response = Invoke-RestMethod @params -Verbose:$false
         Write-Output $response.LockGroup_ID
     } catch {
         $PSCmdlet.ThrowTerminatingError($_)
@@ -330,7 +320,7 @@ function Confirm-IloqAccessKeyEndDate {
         $EndDate
     )
     try {
-        Write-Verbose 'Verifying if an Iloq account has access keys assigned'
+        Write-Verbose 'Verifying if an iLOQ account has access keys assigned'
         $splatParams = @{
             Uri         = "$($config.BaseUrl)/api/v2/Persons/$($PersonId)/Keys"
             Method      = 'GET'
@@ -508,13 +498,13 @@ try {
     # First step is to get the correct url to use for the rest of the API calls.
     $null = Set-IloqResolvedURL -Config $config
 
-    # Get the Iloq sessionId
+    # Get the iLOQ sessionId
     $sessionId = Get-IloqSessionId -Config $config
 
-    # Get the Iloq lockGroupId
+    # Get the iLOQ lockGroupId
     $lockGroupId = Get-IloqLockGroupId -Config $config -SessionId $sessionId
 
-    # Set the Iloq lockGroup in order to make authenticated calls
+    # Set the iLOQ lockGroup in order to make authenticated calls
     $null = Set-IloqLockGroup -Config $config -SessionId $sessionId -LockGroupId $lockGroupId
 
     Write-Verbose 'Adding authorization headers'
@@ -531,7 +521,7 @@ try {
             Headers     = $headers
             ContentType = 'application/json'
         }
-        $userObject = Invoke-RestMethod @splatParams
+        $userObject = Invoke-RestMethod @splatParams -Verbose:$false
     } catch {
         $userObject = $null
     }
@@ -566,7 +556,7 @@ try {
                     ContentType = 'application/json; charset=utf-8'
                 }
 
-                $createUserResponse = Invoke-RestMethod @splatParams
+                $createUserResponse = Invoke-RestMethod @splatParams -Verbose:$false
                 $accountReference = $createUserResponse.PersonIds | Select-Object first 1
                 break
             }
@@ -581,7 +571,7 @@ try {
                     Body        = $account | ConvertTo-Json
                     ContentType = 'application/json; charset=utf-8'
                 }
-                $null = Invoke-RestMethod @splatParams
+                $null = Invoke-RestMethod @splatParams -Verbose:$false
 
                 $accountReference = $userObject.Person_ID
                 # Updating the end date of the access key is a separate process that does not update the person itself, but only the assigned access keys.

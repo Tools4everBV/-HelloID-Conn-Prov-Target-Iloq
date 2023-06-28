@@ -148,7 +148,7 @@ function Get-IloqSessionId {
                 'Password'     = $($config.Password)
             } | ConvertTo-Json
         }
-        $response = Invoke-RestMethod @params
+        $response = Invoke-RestMethod @params -Verbose:$false
         Write-Output $response.SessionID
     }
     catch {
@@ -177,7 +177,7 @@ function Get-IloqLockGroupId {
             Method  = 'GET'
             Headers = $headers
         }
-        $response = Invoke-RestMethod @params
+        $response = Invoke-RestMethod @params -Verbose:$false
         Write-Output $response.LockGroup_ID
     }
     catch {
@@ -212,7 +212,7 @@ function Set-IloqLockGroup {
                 'LockGroup_ID' = $LockGroupId
             } | ConvertTo-Json
         }
-        $response = Invoke-RestMethod @params
+        $response = Invoke-RestMethod @params -Verbose:$false
         Write-Output $response.LockGroup_ID
     }
     catch {
@@ -240,7 +240,7 @@ function Set-IloqResolvedURL {
                 'CustomerCode' = $($config.CustomerCode)
             }  | ConvertTo-Json
         }
-        $resolvedUrl = Invoke-RestMethod @splatParams
+        $resolvedUrl = Invoke-RestMethod @splatParams -Verbose:$false
 
         if ([string]::IsNullOrEmpty($resolvedUrl) ) {
             Write-Verbose "No Resolved - URL found, keep on using the URL provided: $($config.BaseUrl)."
@@ -295,7 +295,7 @@ function Confirm-IloqAccessKeyEndDate {
         $EndDate
     )
     try {
-        Write-Verbose 'Verifying if an Iloq account has access keys assigned'
+        Write-Verbose 'Verifying if an iLOQ account has access keys assigned'
         $splatParams = @{
             Uri         = "$($config.BaseUrl)/api/v2/Persons/$($PersonId)/Keys"
             Method      = 'GET'
@@ -474,13 +474,13 @@ try {
     # First step is to get the correct url to use for the rest of the API calls.
     $null = Set-IloqResolvedURL -Config $config
 
-    # Get the Iloq sessionId
+    # Get the iLOQ sessionId
     $sessionId = Get-IloqSessionId -Config $config
 
-    # Get the Iloq lockGroupId
+    # Get the iLOQ lockGroupId
     $lockGroupId = Get-IloqLockGroupId -Config $config -SessionId $sessionId
 
-    # Set the Iloq lockGroup in order to make authenticated calls
+    # Set the iLOQ lockGroup in order to make authenticated calls
     $null = Set-IloqLockGroup -Config $config -SessionId $sessionId -LockGroupId $lockGroupId
 
     Write-Verbose 'Adding authorization headers'
@@ -501,7 +501,7 @@ try {
             ContentType = 'application/json; charset=utf-8'
         }
 
-        $responseUser = Invoke-RestMethod @splatParams
+        $responseUser = Invoke-RestMethod @splatParams -Verbose:$false
         $dryRunMessage = "Update iLOQ account for: [$($account.person.FirstName)] will be executed during enforcement"
     } catch {
         throw "iLOQ account for: [$($account.person.FirstName)] not found. Possibly already deleted."
@@ -551,7 +551,7 @@ try {
                     ContentType = 'application/json; charset=utf-8'
                 }
 
-                $null = Invoke-RestMethod @splatParams
+                $null = Invoke-RestMethod @splatParams -Verbose:$false
                 break
             }
 

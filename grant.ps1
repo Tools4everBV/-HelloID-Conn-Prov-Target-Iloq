@@ -142,10 +142,9 @@ function Get-IloqZoneId {
         }
         # Use zone with type 4 as default
         $getAllZonesResponse = Invoke-RestMethod @splatParams  -Verbose:$false
-        Write-Verbose $($getAllZonesResponse) -verbose
         $zoneId = $getAllZonesResponse | Where-Object { $_.type -eq $ZoneIdType }
         if ($null -eq $zoneId) {
-            throw 'No valid ZoneId Type [4] found. Please verify for iLoq Configuration'
+            throw 'No valid ZoneId Type [4] found. Please verify for iLOQ Configuration'
         }
         Write-Output $zoneId
     } catch {
@@ -369,7 +368,7 @@ try {
     $headers.Add('Content-Type', 'application/json; charset=utf-8')
     $headers.Add('SessionId', $sessionId)
 
-    Write-Verbose "Verifying if an Iloq account for [$($p.DisplayName)] exists"
+    Write-Verbose "Verifying if an iLOQ account for [$($p.DisplayName)] exists"
     $splatParams = @{
         Uri         = "$($config.BaseUrl)/api/v2/Persons/$($aRef)"
         Method      = 'GET'
@@ -378,7 +377,7 @@ try {
     }
     $responseUser = Invoke-RestMethod @splatParams -Verbose:$false
 
-    Write-Verbose 'Verifying if an Iloq account has access keys assigned'
+    Write-Verbose 'Verifying if an iLOQ account has access keys assigned'
     $splatParams = @{
         Uri         = "$($config.BaseUrl)/api/v2/Persons/$($aRef)/Keys"
         Method      = 'GET'
@@ -407,10 +406,10 @@ try {
         Update-IloqAccessKeyTimeLimitSlot @splatIloqAccessKeyTimeLimitSlot
 
         if ($dryRun -eq $true) {
-            Write-Warning "[DryRun] Grant Iloq entitlement: [$($pRef.DisplayName)] to key : [$($key.Description)] will be executed during enforcement"
+            Write-Warning "[DryRun] Grant iLOQ entitlement: [$($pRef.DisplayName)] to key : [$($key.Description)] will be executed during enforcement"
         }
         if (-not($dryRun -eq $true)) {
-            Write-Verbose "Granting Iloq entitlement: [$($pRef.DisplayName)] to key : [$($key.Description)]"
+            Write-Verbose "Granting iLOQ entitlement: [$($pRef.DisplayName)] to key : [$($key.Description)]"
 
             # Granting Security Accesses
             $splatParams = @{
@@ -444,14 +443,14 @@ try {
                 }
                 2 {
                     $auditLogs.Add([PSCustomObject]@{
-                            Message = "Could not grant Iloq entitlement [$($pRef.DisplayName)] to key: [$($key.Description)]. Key is in unmodifiable state, for ex. blacklisted"
+                            Message = "Could not grant iLOQ entitlement [$($pRef.DisplayName)] to key: [$($key.Description)]. Key is in unmodifiable state, for ex. blacklisted"
                             IsError = $true
                         })
                     break
                 }
                 3 {
                     $auditLogs.Add([PSCustomObject]@{
-                            Message = "Could not grant Iloq entitlement [$($pRef.DisplayName)] to key: [$($key.Description)]. Key has maximum number of security accesses"
+                            Message = "Could not grant iLOQ entitlement [$($pRef.DisplayName)] to key: [$($key.Description)]. Key has maximum number of security accesses"
                             IsError = $true
                         })
                     break
@@ -477,7 +476,7 @@ try {
                     }
                     $null = Invoke-RestMethod @splatParams -Verbose:$false
                     $auditLogs.Add([PSCustomObject]@{
-                            Message = "Grant Iloq entitlement: [$($pRef.DisplayName)] to key: [$($key.Description)] was successful"
+                            Message = "Grant iLOQ entitlement: [$($pRef.DisplayName)] to key: [$($key.Description)] was successful"
                             IsError = $false
                         })
                     $success = $true
@@ -501,7 +500,7 @@ try {
                     }
                     Write-Verbose "$($canOrderAuditMessage)"
                     $auditLogs.Add([PSCustomObject]@{
-                            Message = "Could not grant Iloq entitlement [$($pRef.DisplayName)] to key: [$($key.Description)]. $($canOrderAuditMessage)"
+                            Message = "Could not grant iLOQ entitlement [$($pRef.DisplayName)] to key: [$($key.Description)]. $($canOrderAuditMessage)"
                             IsError = $true
                         })
                 }
@@ -518,10 +517,10 @@ try {
     if ($($ex.Exception.GetType().FullName -eq 'Microsoft.PowerShell.Commands.HttpResponseException') -or
         $($ex.Exception.GetType().FullName -eq 'System.Net.WebException')) {
         $errorObj = Resolve-IloqError -ErrorObject $ex
-        $auditMessage = "Could not grant Iloq entitlement. Error: $($errorObj.FriendlyMessage)"
+        $auditMessage = "Could not grant iLOQ entitlement. Error: $($errorObj.FriendlyMessage)"
         Write-Verbose "Error at Line '$($errorObj.ScriptLineNumber)': $($errorObj.Line). Error: $($errorObj.ErrorDetails)"
     } else {
-        $auditMessage = "Could not grant Iloq entitlement. Error: $($ex.Exception.Message)"
+        $auditMessage = "Could not grant iLOQ entitlement. Error: $($ex.Exception.Message)"
         Write-Verbose "Error at Line '$($ex.InvocationInfo.ScriptLineNumber)': $($ex.InvocationInfo.Line). Error: $($ex.Exception.Message)"
     }
     $auditLogs.Add([PSCustomObject]@{
