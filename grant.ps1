@@ -12,6 +12,10 @@ $success = $false
 $auditLogs = [System.Collections.Generic.List[PSCustomObject]]::new()
 $subPermissions = [System.Collections.Generic.List[PSCustomObject]]::new()
 
+$account = [PSCustomObject]@{
+    EmploymentEndDate = if ($null -ne $p.PrimaryContract.EndDate) { '{0:yyyy-MM-ddThh:mm:ss}' -f ([datetime]$p.PrimaryContract.EndDate) } else { '' };
+}
+
 # Enable TLS1.2
 [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor [System.Net.SecurityProtocolType]::Tls12
 
@@ -209,17 +213,138 @@ function Resolve-IloqError {
     }
 }
 
-function Confirm-IsUpdateRequiredEnddateKey {
+function Update-ILOQAccessKeyExpireDate {
     [CmdletBinding()]
     param(
-        $NewEndDate,
-        $CurrentEnddate
+        [Parameter(mandatory)]
+        $Key,
+
+        [Parameter(mandatory)]
+        [AllowNull()]
+        $EndDate,
+
+        [Parameter(mandatory)]
+        $Headers
     )
-    if ($null -ne $NewEndDate) {
+    try {
+        if (Confirm-UpdateRequiredExpireDate -NewEndDate $EndDate -CurrentEndDate $Key.ExpireDate) {
+            Write-Verbose "ExpireDate of AccessKey [$($Key.Description)] not in sync. Updating ExpireDate"
+            $Key.ExpireDate = $EndDate
+            $bodyKey = @{
+                Key = $Key
+            } | ConvertTo-Json
+
+            if (-not($dryRun -eq $true)) {
+                $splatParams = @{
+                    Uri         = "$($config.BaseUrl)/api/v2/Keys"
+                    Method      = 'PUT'
+                    Headers     = $Headers
+                    Body        = $bodyKey
+                    ContentType = 'application/json; charset=utf-8'
+                }
+                $null = Invoke-RestMethod @splatParams -Verbose:$false
+            }
+        }
+    } catch {
+        $PSCmdlet.ThrowTerminatingError($_)
+    }
+}
+
+function Update-IloqAccessKeyTimeLimitSlot {
+    [CmdletBinding()]
+    param(
+        [Parameter(mandatory)]
+        $Key,
+
+        [Parameter(mandatory)]
+        [AllowNull()]
+        $EndDate,
+
+        [Parameter(mandatory)]
+        $Headers
+    )
+    try {
+        Write-Verbose "Get KeyTimeLimitSlots of Key $($Key.Description)"
+        $splatParams = @{
+            Uri     = "$($config.BaseUrl)/api/v2/Keys/$($Key.FNKey_ID)//TimeLimitTitles?mode=0"
+            Method  = 'GET'
+            Headers = $Headers
+        }
+        $TimeLimitTitles = Invoke-RestMethod @splatParams -Verbose:$false
+        $endDateObject = $TimeLimitTitles.KeyTimeLimitSlots | Where-Object { $_.slotNo -eq 1 }
+        $currentEndDate = $null
+        if ($null -ne $endDateObject ) {
+            $currentEndDate = $endDateObject.LimitDateLg
+        }
+        $newEndDate = Confirm-UpdateRequiredEndDateKey -NewEndDate $EndDate -CurrentEndDate $currentEndDate
+        if (-not [string]::IsNullOrWhiteSpace($newEndDate)) {
+            Write-Verbose "EndDate Update required of AccessKey [$($Key.Description)]"
+            if ($dryRun -eq $true) {
+                Write-Warning "[DryRun] Update EndDate AccessKey: [$($Key.Description)] will be executed during enforcement"
+                Write-Verbose "Current EndDate [$($Key.ExpireDate)] New EndDate: [$($newEndDate)]"
+            }
+            Write-Verbose "Update TimeLimit of AccessKey: [$($Key.Description)]. New EndDate is [$($newEndDate)]"
+            $body = @{
+                TimeLimitSlot = @{
+                    LimitDateLg   = $newEndDate
+                    SlotNo        = 1
+                    TimeLimitData = @()
+                }
+            }
+            if (-not($dryRun -eq $true)) {
+                $splatParams = @{
+                    Uri         = "$($config.BaseUrl)/api/v2/Keys/$($Key.FNKey_ID)/TimeLimitTitles"
+                    Method      = 'POST'
+                    Headers     = $Headers
+                    Body        = ($body | ConvertTo-Json)
+                    ContentType = 'application/json; charset=utf-8'
+                }
+                $null = Invoke-RestMethod @splatParams -Verbose:$false
+                $AuditLogs.Add([PSCustomObject]@{
+                        Action  = 'UpdateAccount'
+                        Message = "Update end date AccessKey: [$($key.Description)] was successful"
+                        IsError = $false
+                    })
+            }
+        }
+    } catch {
+        $PSCmdlet.ThrowTerminatingError($_)
+    }
+}
+
+function Confirm-UpdateRequiredEndDateKey {
+    [CmdletBinding()]
+    param(
+        [Parameter()]
+        $NewEndDate,
+
+        [Parameter()]
+        $CurrentEndDate
+    )
+    if ($NewEndDate -eq $CurrentEndDate -or ($CurrentEndDate -eq '9999-01-01T00:00:00' -and [string]::IsNullOrEmpty($NewEndDate))) {
+        Write-Verbose 'No EndDate Update update required'
+    } else {
+        if ([string]::IsNullOrEmpty($NewEndDate)) {
+            $NewEndDate = '9999-01-01T00:00:00'
+        }
+        Write-Output $NewEndDate
+    }
+}
+
+function Confirm-UpdateRequiredExpireDate {
+    [CmdletBinding()]
+    param(
+        [Parameter()]
+        $NewEndDate,
+
+        [Parameter()]
+        $CurrentEndDate
+    )
+    if (-not [string]::IsNullOrEmpty($NewEndDate)) {
         $_enddate = ([Datetime]$NewEndDate).ToShortDateString()
     }
-    if ($null -ne $key.ExpireDate) {
-        $_currentEnddate = ([Datetime]$CurrentEnddate).ToShortDateString()
+    if (-not [string]::IsNullOrEmpty($CurrentEndDate)) {
+        $_currentEnddate = ([Datetime]$CurrentEndDate).ToShortDateString()
     }
     if ($_currentEnddate -ne $_enddate) {
         Write-Output $true
@@ -267,35 +392,19 @@ try {
     }
 
     foreach ($key in $responseKeys.Keys) {
-        if (Confirm-IsUpdateRequiredEnddateKey -NewEndDate $p.PrimaryContract.Enddate -CurrentEnddate $key.ExpireDate) {
-            Write-Verbose "Enddate Update required of AccessKey [$($key.Description)]"
-
-            if ($dryRun -eq $true) {
-                Write-Warning "[DryRun] Update enddate AccessKey: [$($key.Description)] will be executed during enforcement"
-            }
-            if (-not($dryRun -eq $true)) {
-                $key.ExpireDate = $p.PrimaryContract.Enddate
-                $bodyKey = @{
-                    Key = $key
-                } | ConvertTo-Json
-
-                $splatParams = @{
-                    Uri         = "$($config.BaseUrl)/api/v2/Keys"
-                    Method      = 'PUT'
-                    Headers     = $headers
-                    Body        = $bodyKey
-                    ContentType = 'application/json; charset=utf-8'
-                }
-                $null = Invoke-RestMethod @splatParams -Verbose:$false
-                Write-Verbose "Updated endate of AccessKey: [$($key.Description)]. New Enddate is [$($key.ExpireDate)]"
-
-                $auditLogs.Add([PSCustomObject]@{
-                        Action  = 'UpdateAccount'
-                        Message = "Update enddate AccessKey: [$($key.Description)] was successful"
-                        IsError = $false
-                    })
-            }
+        $splatIloqAccessKeyExpireDate = @{
+            Key     = $key
+            EndDate = $account.EmploymentEndDate
+            Headers = $headers
         }
+        Update-IloqAccessKeyExpireDate @splatIloqAccessKeyExpireDate
+
+        $splatIloqAccessKeyTimeLimitSlot = @{
+            Key     = $key
+            EndDate = $account.EmploymentEndDate
+            Headers = $headers
+        }
+        Update-IloqAccessKeyTimeLimitSlot @splatIloqAccessKeyTimeLimitSlot
 
         if ($dryRun -eq $true) {
             Write-Warning "[DryRun] Grant Iloq entitlement: [$($pRef.DisplayName)] to key : [$($key.Description)] will be executed during enforcement"
@@ -303,7 +412,7 @@ try {
         if (-not($dryRun -eq $true)) {
             Write-Verbose "Granting Iloq entitlement: [$($pRef.DisplayName)] to key : [$($key.Description)]"
 
-
+            # Granting Security Accesses
             $splatParams = @{
                 Uri     = "$($config.BaseUrl)/api/v2/Keys/$($key.FNKey_ID)/SecurityAccesses/CanAdd"
                 Method  = 'GET'
@@ -324,11 +433,6 @@ try {
                         ContentType = 'application/json; charset=utf-8'
                     }
                     $null = Invoke-RestMethod @splatParams -Verbose:$false # 204
-
-                    $auditLogs.Add([PSCustomObject]@{
-                            Message = "Grant Iloq entitlement: [$($pRef.DisplayName)] to key: [$($key.Description)] was successful"
-                            IsError = $false
-                        })
                     $subPermissions.Add([PSCustomObject]@{
                             DisplayName = "Person [$($responseUser.PersonCode)] - AccessKey [$($key.Description)]"
                             Reference   = [PSCustomObject]@{
@@ -336,25 +440,77 @@ try {
                                 Permission = $pRef.DisplayName
                             }
                         })
-                    $success = $true
                     break
                 }
                 2 {
                     $auditLogs.Add([PSCustomObject]@{
                             Message = "Could not grant Iloq entitlement [$($pRef.DisplayName)] to key: [$($key.Description)]. Key is in unmodifiable state, for ex. blacklisted"
-                            IsError = $false
+                            IsError = $true
                         })
                     break
                 }
                 3 {
                     $auditLogs.Add([PSCustomObject]@{
                             Message = "Could not grant Iloq entitlement [$($pRef.DisplayName)] to key: [$($key.Description)]. Key has maximum number of security accesses"
-                            IsError = $false
+                            IsError = $true
                         })
                     break
                 }
             }
+
+            # Ordering Updated Access Key
+            if ($canAdd -eq 1) {
+                Write-Verbose 'Checks if key can be ordered.'
+                $splatParams = @{
+                    Uri     = "$($config.BaseUrl)/api/v2/Keys/$($key.FNKey_ID)/CanOrder"
+                    Method  = 'GET'
+                    Headers = $headers
+                }
+                $canOrder = Invoke-RestMethod @splatParams -Verbose:$false
+
+                if ($canOrder -eq 0) {
+                    Write-Verbose 'Ok, can order key, ordering key..'
+                    $splatParams = @{
+                        Uri     = "$($config.BaseUrl)/api/v2/Keys/$($key.FNKey_ID)/Order"
+                        Method  = 'GET'
+                        Headers = $headers
+                    }
+                    $null = Invoke-RestMethod @splatParams -Verbose:$false
+                    $auditLogs.Add([PSCustomObject]@{
+                            Message = "Grant Iloq entitlement: [$($pRef.DisplayName)] to key: [$($key.Description)] was successful"
+                            IsError = $false
+                        })
+                    $success = $true
+                } else {
+                    $canOrderAuditMessage = switch ($canOrder) {
+                        1 { 'Key has changes which require iLOQ Manager + token to order.'; break; }
+                        2 { "Key isn't a phone or 5 Series key and can't be ordered using public api"; break; }
+                        3 { "Key can't be ordered because the license limit has been exceeded. Return keys or contact iLOQ to acquire more licenses."; break; }
+                        4 { 'Key is in wrong state. Only keys in planning state can be ordered.'; break; }
+                        5 { "Key's id is too large."; break; }
+                        6 { 'Key has security accesses which are outside his zones. This can only occur if key is a new key.'; break; }
+                        7 { 'Key has time limits which are outside his zones. This can only occur if key is a new key.'; break; }
+                        8 { 'Key is in block list.'; break; }
+                        9 { "Phone key doesn't have phone number set on FNKeyPhone"; break; }
+                        10 { "Phone key doesn't have email address set on FNKeyPhone and FNKeyPhone.OptionMask states that messages are sent via email."; break; }
+                        11 { 'Key has too many timelimits defined.'; break; }
+                        12 { 'Key main zone is not set and is required.'; break; }
+                        13 { "Key doesn't have person attached in to it"; break; }
+                        14 { "External Key doesn't have TagKey set"; break; }
+                        -1 { 'Error occurred during checking'; break; }
+                    }
+                    Write-Verbose "$($canOrderAuditMessage)"
+                    $auditLogs.Add([PSCustomObject]@{
+                            Message = "Could not grant Iloq entitlement [$($pRef.DisplayName)] to key: [$($key.Description)]. $($canOrderAuditMessage)"
+                            IsError = $true
+                        })
+                }
+            }
         }
+    }
+
+    if (-not ($auditLogs.isError -contains $true)) {
+        $success = $true
     }
 } catch {
     $success = $false
@@ -381,3 +537,6 @@ try {
     }
     Write-Output $result | ConvertTo-Json -Depth 10
 }
+
+
+

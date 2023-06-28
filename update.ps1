@@ -94,7 +94,7 @@ $account = [PSCustomObject]@{
         ContactInfo       = ""
         Country           = ""
         Description       = ""
-        EmploymentEndDate = $p.PrimaryContract.EndDate
+        EmploymentEndDate = if ($null -ne $p.PrimaryContract.EndDate) { '{0:yyyy-MM-ddThh:mm:ss}' -f ([datetime]$p.PrimaryContract.EndDate) } else { '' };
         ExternalCanEdit   = ""
         ExternalPersonId  = $p.ExternalId
         FirstName         = $p.Name.NickName
@@ -280,7 +280,7 @@ function Resolve-IloqError {
     }
 }
 
-function Invoke-UpdateILoqAccesskeyEnddateIfRequired {
+function Confirm-IloqAccessKeyEndDate {
     [CmdletBinding()]
     param(
         [string]
@@ -291,11 +291,8 @@ function Invoke-UpdateILoqAccesskeyEnddateIfRequired {
         $Headers,
 
         [Parameter()]
-        $Enddate,
-
-        [ref]
-        [Parameter(Mandatory)]
-        $AuditLogs
+        [AllowNull()]
+        $EndDate
     )
     try {
         Write-Verbose 'Verifying if an Iloq account has access keys assigned'
@@ -308,59 +305,162 @@ function Invoke-UpdateILoqAccesskeyEnddateIfRequired {
         $responseKeys = Invoke-RestMethod @splatParams -Verbose:$false
 
         if ($responseKeys.keys.Length -eq 0) {
-            Write-Verbose  "No Keys assigned to Person: [$($responseUser.PersonCode)] Aref: [$($PersonId)]"
-
+            throw  "No Keys assigned to Person: [$($responseUser.PersonCode)] Aref: [$($PersonId)]"
         } else {
             Write-Verbose "Checking if the end date needs to be updated for the assigned access keys [$($responseKeys.Keys.Description -join ', ')]"
             foreach ($key in $responseKeys.Keys) {
-                if (Confirm-IsUpdateRequiredEnddateKey -NewEndDate $Enddate -CurrentEnddate $key.ExpireDate) {
-                    Write-Verbose "Enddate Update required of AccessKey [$($key.Description)]"
-
-                    if ($dryRun -eq $true) {
-                        Write-Warning "[DryRun] Update enddate AccessKey: [$($key.Description)] will be executed during enforcement"
-                        Write-Verbose "Current Enddate [$($key.ExpireDate)] New Enddate: [$(if ($null -eq $($Enddate)) {'Null'} else {$Enddate})]"
-                    }
-                    if (-not($dryRun -eq $true)) {
-                        $key.ExpireDate = $Enddate
-                        $bodyKey = @{
-                            Key = $key
-                        } | ConvertTo-Json
-
-                        $splatParams = @{
-                            Uri         = "$($config.BaseUrl)/api/v2/Keys"
-                            Method      = 'PUT'
-                            Headers     = $Headers
-                            Body        = $bodyKey
-                            ContentType = 'application/json; charset=utf-8'
-                        }
-                        $null = Invoke-RestMethod @splatParams -Verbose:$false
-                        Write-Verbose "Updated endate of AccessKey: [$($key.Description)]. New Enddate is [$(if ($null -eq $($key.ExpireDate)) {'Null'} else {$key.ExpireDate})]"
-
-                        $AuditLogs.Value.Add([PSCustomObject]@{
-                                Action  = 'UpdateAccount'
-                                Message = "Update enddate AccessKey: [$($key.Description)] was successful"
-                                IsError = $false
-                            })
-                    }
+                $splatIloqAccessKeyExpireDate = @{
+                    Key     = $key
+                    EndDate = $EndDate
+                    Headers = $headers
                 }
+                Update-IloqAccessKeyExpireDate @splatIloqAccessKeyExpireDate
+
+                $splatIloqAccessKeyTimeLimitSlot = @{
+                    Key     = $key
+                    EndDate = $EndDate
+                    Headers = $headers
+                }
+                Update-IloqAccessKeyTimeLimitSlot @splatIloqAccessKeyTimeLimitSlot
             }
         }
     } catch {
-        Write-Warning "Could not update AccessKey for person [$($responseUser.PersonCode)] Error: $($_)"
+        Write-Warning "Could not update AccessKey for person [$($PersonId)] Error: $($_)"
     }
 }
 
-function Confirm-IsUpdateRequiredEnddateKey {
+function Update-ILOQAccessKeyExpireDate {
     [CmdletBinding()]
     param(
-        $NewEndDate,
-        $CurrentEnddate
+        [Parameter(mandatory)]
+        $Key,
+
+        [Parameter(mandatory)]
+        [AllowNull()]
+        $EndDate,
+
+        [Parameter(mandatory)]
+        $Headers
     )
-    if ($null -ne $NewEndDate) {
+    try {
+        if (Confirm-UpdateRequiredExpireDate -NewEndDate $EndDate -CurrentEndDate $Key.ExpireDate) {
+            Write-Verbose "ExpireDate of AccessKey [$($Key.Description)] not in sync. Updating ExpireDate"
+            $Key.ExpireDate = $EndDate
+            $bodyKey = @{
+                Key = $Key
+            } | ConvertTo-Json
+
+            if (-not($dryRun -eq $true)) {
+                $splatParams = @{
+                    Uri         = "$($config.BaseUrl)/api/v2/Keys"
+                    Method      = 'PUT'
+                    Headers     = $Headers
+                    Body        = $bodyKey
+                    ContentType = 'application/json; charset=utf-8'
+                }
+                $null = Invoke-RestMethod @splatParams -Verbose:$false
+            }
+        }
+    } catch {
+        $PSCmdlet.ThrowTerminatingError($_)
+    }
+}
+
+function Update-IloqAccessKeyTimeLimitSlot {
+    [CmdletBinding()]
+    param(
+        [Parameter(mandatory)]
+        $Key,
+
+        [Parameter(mandatory)]
+        [AllowNull()]
+        $EndDate,
+
+        [Parameter(mandatory)]
+        $Headers
+    )
+    try {
+        Write-Verbose "Get KeyTimeLimitSlots of Key $($Key.Description)"
+        $splatParams = @{
+            Uri     = "$($config.BaseUrl)/api/v2/Keys/$($Key.FNKey_ID)//TimeLimitTitles?mode=0"
+            Method  = 'GET'
+            Headers = $Headers
+        }
+        $TimeLimitTitles = Invoke-RestMethod @splatParams -Verbose:$false
+        $endDateObject = $TimeLimitTitles.KeyTimeLimitSlots | Where-Object { $_.slotNo -eq 1 }
+        $currentEndDate = $null
+        if ($null -ne $endDateObject ) {
+            $currentEndDate = $endDateObject.LimitDateLg
+        }
+        $newEndDate = Confirm-UpdateRequiredEndDateKey -NewEndDate $EndDate -CurrentEndDate $currentEndDate
+        if (-not [string]::IsNullOrWhiteSpace($newEndDate)) {
+            Write-Verbose "EndDate Update required of AccessKey [$($Key.Description)]"
+            if ($dryRun -eq $true) {
+                Write-Warning "[DryRun] Update EndDate AccessKey: [$($Key.Description)] will be executed during enforcement"
+                Write-Verbose "Current EndDate [$($Key.ExpireDate)] New EndDate: [$($newEndDate)]"
+            }
+            Write-Verbose "Update TimeLimit of AccessKey: [$($Key.Description)]. New EndDate is [$($newEndDate)]"
+            $body = @{
+                TimeLimitSlot = @{
+                    LimitDateLg   = $newEndDate
+                    SlotNo        = 1
+                    TimeLimitData = @()
+                }
+            }
+            if (-not($dryRun -eq $true)) {
+                $splatParams = @{
+                    Uri         = "$($config.BaseUrl)/api/v2/Keys/$($Key.FNKey_ID)/TimeLimitTitles"
+                    Method      = 'POST'
+                    Headers     = $Headers
+                    Body        = ($body | ConvertTo-Json)
+                    ContentType = 'application/json; charset=utf-8'
+                }
+                $null = Invoke-RestMethod @splatParams -Verbose:$false
+                $AuditLogs.Add([PSCustomObject]@{
+                    Action  = 'UpdateAccount'
+                    Message = "Update end date AccessKey: [$($key.Description)] was successful"
+                    IsError = $false
+                })
+            }
+        }
+    } catch {
+        $PSCmdlet.ThrowTerminatingError($_)
+    }
+}
+
+function Confirm-UpdateRequiredEndDateKey {
+    [CmdletBinding()]
+    param(
+        [Parameter()]
+        $NewEndDate,
+
+        [Parameter()]
+        $CurrentEndDate
+    )
+    if ($NewEndDate -eq $CurrentEndDate -or ($CurrentEndDate -eq '9999-01-01T00:00:00' -and [string]::IsNullOrEmpty($NewEndDate))) {
+        Write-Verbose 'No EndDate Update update required'
+    } else {
+        if ([string]::IsNullOrEmpty($NewEndDate)) {
+            $NewEndDate = '9999-01-01T00:00:00'
+        }
+        Write-Output $NewEndDate
+    }
+}
+
+function Confirm-UpdateRequiredExpireDate {
+    [CmdletBinding()]
+    param(
+        [Parameter()]
+        $NewEndDate,
+
+        [Parameter()]
+        $CurrentEndDate
+    )
+    if (-not [string]::IsNullOrEmpty($NewEndDate)) {
         $_enddate = ([Datetime]$NewEndDate).ToShortDateString()
     }
-    if ($null -ne $key.ExpireDate) {
-        $_currentEnddate = ([Datetime]$CurrentEnddate).ToShortDateString()
+    if (-not [string]::IsNullOrEmpty($CurrentEndDate)) {
+        $_currentEnddate = ([Datetime]$CurrentEndDate).ToShortDateString()
     }
     if ($_currentEnddate -ne $_enddate) {
         Write-Output $true
@@ -417,13 +517,12 @@ try {
     # Keeping the end date of the access key in sync is a separate process that does not update the person itself, but only the assigned access keys.
     # Therefore, this is encapsulated in a single function with its own dry-run and audit logging. When an exception occurs, only a warning is shown,
     # so it does not disrupt the account update process.
-    $splatUpdateAccesskeyEnddateIfRequired = @{
-        PersonId  = $aRef
-        Headers   = $headers
-        Enddate   = $p.PrimaryContract.Enddate
-        AuditLogs = ([ref]$auditLogs)
+    $splatConfirmIloqAccessKey = @{
+        PersonId = $aRef
+        Headers  = $headers
+        Enddate  = $p.PrimaryContract.Enddate
     }
-    $null = Invoke-UpdateILoqAccesskeyEnddateIfRequired @splatUpdateAccesskeyEnddateIfRequired
+    $null = Confirm-IloqAccessKeyEndDate @splatConfirmIloqAccessKey
 
     if (-not($dryRun -eq $true)) {
         if ($null -ne $responseUser) {
