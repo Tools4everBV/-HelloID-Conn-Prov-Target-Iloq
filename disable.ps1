@@ -149,7 +149,7 @@ function Get-IloqSessionId {
                 'Password'     = $($config.Password)
             } | ConvertTo-Json
         }
-        $response = Invoke-RestMethod @params
+        $response = Invoke-RestMethod @params -Verbose:$false
         Write-Output $response.SessionID
     }
     catch {
@@ -178,7 +178,7 @@ function Get-IloqLockGroupId {
             Method  = 'GET'
             Headers = $headers
         }
-        $response = Invoke-RestMethod @params
+        $response = Invoke-RestMethod @params -Verbose:$false
         Write-Output $response.LockGroup_ID
     }
     catch {
@@ -213,7 +213,7 @@ function Set-IloqLockGroup {
                 'LockGroup_ID' = $LockGroupId
             } | ConvertTo-Json
         }
-        $response = Invoke-RestMethod @params
+        $response = Invoke-RestMethod @params -Verbose:$false
         Write-Output $response.LockGroup_ID
     }
     catch {
@@ -241,7 +241,7 @@ function Set-IloqResolvedURL {
                 'CustomerCode' = $($config.CustomerCode)
             }  | ConvertTo-Json
         }
-        $resolvedUrl = Invoke-RestMethod @splatParams
+        $resolvedUrl = Invoke-RestMethod @splatParams -Verbose:$false
 
         if ([string]::IsNullOrEmpty($resolvedUrl) ) {
             Write-Verbose "No Resolved - URL found, keep on using the URL provided: $($config.BaseUrl)."
@@ -286,13 +286,13 @@ try {
     # First step is to get the correct url to use for the rest of the API calls.
     $null =  Set-IloqResolvedURL -Config $config
 
-    # Get the Iloq sessionId
+    # Get the iLOQ sessionId
     $sessionId = Get-IloqSessionId -Config $config
 
-    # Get the Iloq lockGroupId
+    # Get the iLOQ lockGroupId
     $lockGroupId = Get-IloqLockGroupId -Config $config -SessionId $sessionId
 
-    # Set the Iloq lockGroup in order to make authenticated calls
+    # Set the iLOQ lockGroup in order to make authenticated calls
     $null = Set-IloqLockGroup -Config $config -SessionId $sessionId -LockGroupId $lockGroupId
 
     Write-Verbose 'Adding authorization headers'
@@ -310,7 +310,7 @@ try {
             ContentType = 'application/json; charset=utf-8'
         }
 
-        $responseUser = Invoke-RestMethod @splatParams
+        $responseUser = Invoke-RestMethod @splatParams -Verbose:$false
         $action = 'Found'
         $dryRunMessage = "Disable iLOQ account for: [$($account.person.FirstName)] will be executed during enforcement"
     }
@@ -342,7 +342,7 @@ try {
                     ContentType = 'application/json; charset=utf-8'
                 }
 
-                $null = Invoke-RestMethod @splatParams
+                $null = Invoke-RestMethod @splatParams -Verbose:$false
 
                 #get keys for person
                 $splatParams = @{
@@ -352,7 +352,7 @@ try {
                     ContentType = 'application/json; charset=utf-8'
                 }
 
-                $keys = Invoke-RestMethod @splatParams
+                $keys = Invoke-RestMethod @splatParams -Verbose:$false
 
                 if ($keys.keys.count -eq 0) {
                     $auditLogs.Add([PSCustomObject]@{
@@ -370,7 +370,7 @@ try {
                             ContentType = 'application/json; charset=utf-8'
                         }
         
-                        $result = Invoke-RestMethod @splatParams 
+                        $result = Invoke-RestMethod @splatParams  -Verbose:$false
                         switch ($result) {
                             0 { 
                                 #return keys
@@ -382,7 +382,7 @@ try {
                                     ContentType = 'application/json; charset=utf-8'
                                 }
                 
-                                $null = Invoke-RestMethod @splatParams 
+                                $null = Invoke-RestMethod @splatParams  -Verbose:$false
 
                                 $auditLogs.Add([PSCustomObject]@{
                                         Message = "Account: $($aRef). Revoke key [$($key.FNKey_ID)] was successfull"
