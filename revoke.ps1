@@ -264,7 +264,7 @@ function Update-IloqAccessKeyTimeLimitSlot {
     try {
         Write-Verbose "Get KeyTimeLimitSlots of Key $($Key.Description)"
         $splatParams = @{
-            Uri     = "$($config.BaseUrl)/api/v2/Keys/$($Key.FNKey_ID)//TimeLimitTitles?mode=0"
+            Uri     = "$($config.BaseUrl)/api/v2/Keys/$($Key.FNKey_ID)/TimeLimitTitles?mode=0"
             Method  = 'GET'
             Headers = $Headers
         }
@@ -274,27 +274,46 @@ function Update-IloqAccessKeyTimeLimitSlot {
         if ($null -ne $endDateObject ) {
             $currentEndDate = $endDateObject.LimitDateLg
         }
-        $newEndDate = Confirm-UpdateRequiredEndDateKey -NewEndDate $EndDate -CurrentEndDate $currentEndDate
-        if (-not [string]::IsNullOrWhiteSpace($newEndDate)) {
+        if (Confirm-UpdateRequiredExpireDate -NewEndDate $EndDate -CurrentEndDate $currentEndDate) {
             Write-Verbose "EndDate Update required of AccessKey [$($Key.Description)]"
-            if ($dryRun -eq $true) {
-                Write-Warning "[DryRun] Update EndDate AccessKey: [$($Key.Description)] will be executed during enforcement"
-                Write-Verbose "Current EndDate [$($Key.ExpireDate)] New EndDate: [$($newEndDate)]"
+            Write-Verbose "Update TimeLimit of AccessKey: [$($Key.Description)]. New EndDate is [$($EndDate)]"
+
+            # Retrieve the existing security accesses, Because updating Time Limits overwrites the existing accesses.
+            $splatParams = @{
+                Uri     = "$($config.BaseUrl)/api/v2/Keys/$($Key.FNKey_ID)/SecurityAccesses?mode=0"
+                Method  = 'GET'
+                Headers = $Headers
             }
-            Write-Verbose "Update TimeLimit of AccessKey: [$($Key.Description)]. New EndDate is [$($newEndDate)]"
+            $currentSecurityAccesses = ([array](Invoke-RestMethod @splatParams -Verbose:$false).SecurityAccesses)
+
             $body = @{
-                TimeLimitSlot = @{
-                    LimitDateLg   = $newEndDate
+                KeyScheduler                       = @{}
+                OfflineExpirationSeconds           = 0
+                OutsideUserZoneTimeLimitTitleSlots = @()
+                SecurityAccessIds                  = @()
+                TimeLimitSlots                     = @()
+            }
+            if ( $null -ne $currentSecurityAccesses.SecurityAccess_ID  ) {
+                $body.SecurityAccessIds += $currentSecurityAccesses.SecurityAccess_ID
+            }
+
+            if (-not ([string]::IsNullOrEmpty($EndDate))) {
+                $body.TimeLimitSlots += @{
+                    LimitDateLg   = $EndDate
                     SlotNo        = 1
                     TimeLimitData = @()
                 }
             }
+            if ($dryRun -eq $true) {
+                Write-Warning "[DryRun] Update EndDate AccessKey: [$($Key.Description)] will be executed during enforcement"
+                Write-Verbose "Current EndDate [$($Key.ExpireDate)] New EndDate: [$($EndDate)]"
+            }
             if (-not($dryRun -eq $true)) {
                 $splatParams = @{
-                    Uri         = "$($config.BaseUrl)/api/v2/Keys/$($Key.FNKey_ID)/TimeLimitTitles"
-                    Method      = 'POST'
+                    Uri         = "$($config.BaseUrl)/api/v2/Keys/$($Key.FNKey_ID)/SecurityAccesses"
+                    Method      = 'PUT'
                     Headers     = $Headers
-                    Body        = ($body | ConvertTo-Json)
+                    Body        = ($body | ConvertTo-Json -Depth 10)
                     ContentType = 'application/json; charset=utf-8'
                 }
                 $null = Invoke-RestMethod @splatParams -Verbose:$false
@@ -307,25 +326,6 @@ function Update-IloqAccessKeyTimeLimitSlot {
         }
     } catch {
         $PSCmdlet.ThrowTerminatingError($_)
-    }
-}
-
-function Confirm-UpdateRequiredEndDateKey {
-    [CmdletBinding()]
-    param(
-        [Parameter()]
-        $NewEndDate,
-
-        [Parameter()]
-        $CurrentEndDate
-    )
-    if ($NewEndDate -eq $CurrentEndDate -or ($CurrentEndDate -eq '9999-01-01T00:00:00' -and [string]::IsNullOrEmpty($NewEndDate))) {
-        Write-Verbose 'No EndDate Update update required'
-    } else {
-        if ([string]::IsNullOrEmpty($NewEndDate)) {
-            $NewEndDate = '9999-01-01T00:00:00'
-        }
-        Write-Output $NewEndDate
     }
 }
 
