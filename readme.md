@@ -80,7 +80,7 @@ You can change this behavior in the configuration by selecting the IsUpdatePerso
 - The Enddate of the AccessKey is kept in sync with the person's primary contract enddate to ensure that it is always up-to-date. An additional check is run in some sort of extra process in the following HelloId Actions: **Create, Update, Grant, and Revoke**. This check verifies if the accessKey enddate differs from the enddate of the primary contract, and if so, it updates the enddate on the access key. This is done on all the access keys assigned to the person. Because this process is slightly different from the normal Account LifeCycle or managing permissions, it does not throw termination errors but instead adds a warning to the process logging. (Of course, this can be changed.)
 - Please note that after updating the security access on the key with HelloID, the security accesses are granted in the system but are not directly synced to the actual key. This programming happens either by passing through an online reader (for example, an active door reader capable of syncing the latest changes) or by programming with a physical programming key.
 - There are two types of end dates that can be updated on an AccessKey. There is an ExpireDate and a Timelimit Slot. The ExpireDate is only an informational value, while the Timelimit slot actually prevents access whenever the end date is expired. The connector keeps both dates in sync with the primary contract end date, as already mentioned above.
-- The end date in the Time Limit cannot be cleared, so if it needs to be cleared, the end date will be set to 9999-01-01 instead.
+
 
 
 #### Permissions Remarks
@@ -97,6 +97,7 @@ The connector process for managing access keys involves the creation of user acc
  - The grant or revoke permissions process is created to set the specified permissions for all access keys assigned to a user.
  - When a person has multiple keys assigned, the granted permissions for each key are displayed as sub-permissions in the entitlement overview.
  - After each change in Security Access permissions, the key needs to be ordered in order to make the new permission set available for ordering [More info Here](https://s5.iloq.com/iLOQPublicApiDoc/use_cases/iLOQ_ManageKeysSecurityAccessesRemotely.html). This can cause inconvenience whenever a permission is revoked and the CanOrder action fails. The webservice has already deleted the permission, so in the retry, the permission is already removed according to the API. This means that the key should always be ordered in the revoke action, even if the API indicates that the permission has already been removed.
+ - The connector does support only locking systems that have zone functionality On
 
 ## Getting help
 
