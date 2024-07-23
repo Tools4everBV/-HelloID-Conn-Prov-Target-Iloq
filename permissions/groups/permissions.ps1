@@ -1,23 +1,45 @@
-###########################################
-# HelloID-Conn-Prov-Target-Iloq-Permissions
-#
-# Version: 1.0.0
-###########################################
-# Initialize default values
-$config = $configuration | ConvertFrom-Json
-$success = $false
-$auditLogs = [System.Collections.Generic.List[PSCustomObject]]::new()
+############################################################
+# HelloID-Conn-Prov-Target-Iloq-Permissions-Group
+# PowerShell V2
+############################################################
 
 # Enable TLS1.2
 [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor [System.Net.SecurityProtocolType]::Tls12
 
-# Set debug logging
-switch ($($config.IsDebug)) {
-    $true { $VerbosePreference = 'Continue' }
-    $false { $VerbosePreference = 'SilentlyContinue' }
+#region functions
+function Get-IloqResolvedURL {
+    [CmdletBinding()]
+    param (
+        [object]
+        $config
+    )
+    try {
+        [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor [System.Net.SecurityProtocolType]::Tls12
+        $headers = [System.Collections.Generic.Dictionary[string, string]]::new()
+        $headers.Add('Content-Type', 'application/json')
+        $headers.Add('SessionId', $SessionId)
+
+        $splatParams = @{
+            Uri         = "$($config.BaseUrl)/api/v2/Url/GetUrl"
+            Method      = 'POST'
+            ContentType = 'application/json'
+            Body        = @{
+                'CustomerCode' = $($config.CustomerCode)
+            }  | ConvertTo-Json
+        }
+        $resolvedUrl = Invoke-RestMethod @splatParams -Verbose:$false
+
+        if ([string]::IsNullOrEmpty($resolvedUrl) ) {
+            Write-Information "No Resolved - URL found, keep on using the URL provided: $($config.BaseUrl)."
+        } else {
+            Write-Information "Resolved - URL found [$resolvedUrl , Using the found url to execute the subsequent requests."
+            $config.BaseUrl = $resolvedUrl
+        }
+    } catch {
+        $PSCmdlet.ThrowTerminatingError($_)
+    }
 }
 
-#region functions
 function Get-IloqSessionId {
     [CmdletBinding()]
     param (
@@ -40,12 +62,13 @@ function Get-IloqSessionId {
                 'Password'     = $($config.Password)
             } | ConvertTo-Json
         }
-        $response = Invoke-RestMethod @params  -Verbose:$false
+        $response = Invoke-RestMethod @params -Verbose:$false
         Write-Output $response.SessionID
     } catch {
         $PSCmdlet.ThrowTerminatingError($_)
     }
 }
+
 
 function Get-IloqLockGroupId {
     [CmdletBinding()]
@@ -68,82 +91,12 @@ function Get-IloqLockGroupId {
             Method  = 'GET'
             Headers = $headers
         }
-        $response = Invoke-RestMethod @params  -Verbose:$false
+        $response = Invoke-RestMethod @params -Verbose:$false
         Write-Output $response.LockGroup_ID
     } catch {
         $PSCmdlet.ThrowTerminatingError($_)
     }
 }
-
-function Set-IloqResolvedURL {
-    [CmdletBinding()]
-    param (
-        [object]
-        $config
-    )
-    try {
-        [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor [System.Net.SecurityProtocolType]::Tls12
-        $headers = [System.Collections.Generic.Dictionary[string, string]]::new()
-        $headers.Add('Content-Type', 'application/json')
-        $headers.Add('SessionId', $SessionId)
-
-        $splatParams = @{
-            Uri         = "$($config.BaseUrl)/api/v2/Url/GetUrl"
-            Method      = 'POST'
-            ContentType = 'application/json'
-            Body        = @{
-                'CustomerCode' = $($config.CustomerCode)
-            }  | ConvertTo-Json
-        }
-        $resolvedUrl = Invoke-RestMethod @splatParams  -Verbose:$false
-
-        if ([string]::IsNullOrEmpty($resolvedUrl) ) {
-            Write-Verbose "No Resolved - URL found, keep on using the URL provided: $($config.BaseUrl)."
-        } else {
-            Write-Verbose "Resolved - URL found [$resolvedUrl , Using the found url to execute the following requests."
-            $config.BaseUrl = $resolvedUrl
-        }
-    } catch {
-        $PSCmdlet.ThrowTerminatingError($_)
-    }
-}
-
-function Get-IloqZoneId {
-    [CmdletBinding()]
-    param (
-        [object]
-        $config,
-
-        [string]
-        $SessionId,
-
-        [int]
-        $ZoneIdType
-    )
-    try {
-        [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor [System.Net.SecurityProtocolType]::Tls12
-        $headers = [System.Collections.Generic.Dictionary[string, string]]::new()
-        $headers.Add('Content-Type', 'application/json')
-        $headers.Add('SessionId', $SessionId)
-
-        $splatParams = @{
-            Uri         = "$($config.BaseUrl)/api/v2/Zones"
-            Method      = 'GET'
-            Headers     = $headers
-            ContentType = 'application/json'
-        }
-        # Use zone with type 4 as default
-        $getAllZonesResponse = Invoke-RestMethod @splatParams  -Verbose:$false
-        $zoneId = $getAllZonesResponse | Where-Object { $_.type -eq $ZoneIdType }
-        if ($null -eq $zoneId) {
-            throw 'No valid ZoneId Type [4] found. Please verify for iLOQ Configuration'
-        }
-        Write-Output $zoneId
-    } catch {
-        $PSCmdlet.ThrowTerminatingError($_)
-    }
-}
-
 function Set-IloqLockGroup {
     [CmdletBinding()]
     param (
@@ -203,58 +156,56 @@ function Resolve-IloqError {
         Write-Output $httpErrorObj
     }
 }
+
 #endregion
 
 try {
+    Write-Information 'Retrieving permissions'
+
     # First step is to get the correct url to use for the rest of the API calls.
-    $null = Set-IloqResolvedURL -Config $config
+    $null = Get-IloqResolvedURL -Config $actionContext.Configuration
 
     # Get the iLOQ sessionId
-    $sessionId = Get-IloqSessionId -Config $config
+    $sessionId = Get-IloqSessionId -Config $actionContext.Configuration
 
     # Get the iLOQ lockGroupId
-    $lockGroupId = Get-IloqLockGroupId -Config $config -SessionId $sessionId
+    $lockGroupId = Get-IloqLockGroupId -Config $actionContext.Configuration -SessionId $sessionId
 
     # Set the iLOQ lockGroup in order to make authenticated calls
-    $null = Set-IloqLockGroup -Config $config -SessionId $sessionId -LockGroupId $lockGroupId
+    $null = Set-IloqLockGroup -Config $actionContext.Configuration -SessionId $sessionId -LockGroupId $lockGroupId
 
-    Write-Verbose 'Adding authorization headers'
     $headers = [System.Collections.Generic.Dictionary[string, string]]::new()
     $headers.Add('Content-Type', 'application/json; charset=utf-8')
     $headers.Add('SessionId', $sessionId)
 
     $splatParams = @{
-        Uri         = "$($config.BaseUrl)/api/v2/SecurityAccesses"
+        Uri         = "$($actionContext.Configuration.BaseUrl)/api/v2/SecurityAccesses"
         Method      = 'GET'
         Headers     = $headers
         ContentType = 'application/json'
     }
     $securityAccesses = Invoke-RestMethod @splatParams  -Verbose:$false
 
-    # foreach ($permission in $securityAccesses) {
-    foreach ($permission in $securityAccesses | Where-Object { $_.Type -eq 3 }) {
-        @{
-            DisplayName    = $permission.Name
-            Identification = @{
-                DisplayName = $permission.Name
-                Reference   = $permission.SecurityAccess_ID
-            }
-        } | ConvertTo-Json -Depth 10
-    }
+    $retrievedPermissions = $securityAccesses | Where-Object { $_.Type -eq 3 }
 
+    foreach ($permission in $retrievedPermissions) {
+        $outputContext.Permissions.Add(
+            @{
+                DisplayName    = $permission.Name
+                Identification = @{
+                    Reference   = $permission.SecurityAccess_ID
+                    DisplayName = $permission.Name
+                }
+            }
+        )
+    }
 } catch {
     $ex = $PSItem
     if ($($ex.Exception.GetType().FullName -eq 'Microsoft.PowerShell.Commands.HttpResponseException') -or
         $($ex.Exception.GetType().FullName -eq 'System.Net.WebException')) {
         $errorObj = Resolve-IloqError -ErrorObject $ex
-        $auditMessage = "Could not retrieve iLOQ permissions. Error: $($errorObj.FriendlyMessage)"
-        Write-Verbose "Error at Line '$($errorObj.ScriptLineNumber)': $($errorObj.Line). Error: $($errorObj.ErrorDetails)"
+        Write-Warning "Error at Line '$($errorObj.ScriptLineNumber)': $($errorObj.Line). Error: $($errorObj.ErrorDetails)"
     } else {
-        $auditMessage = "Could not retrieve iLOQ permissions. Error: $($ex.Exception.Message)"
-        Write-Verbose "Error at Line '$($ex.InvocationInfo.ScriptLineNumber)': $($ex.InvocationInfo.Line). Error: $($ex.Exception.Message)"
+        Write-Warning "Error at Line '$($ex.InvocationInfo.ScriptLineNumber)': $($ex.InvocationInfo.Line). Error: $($ex.Exception.Message)"
     }
-    $auditLogs.Add([PSCustomObject]@{
-            Message = $auditMessage
-            IsError = $true
-        })
 }
