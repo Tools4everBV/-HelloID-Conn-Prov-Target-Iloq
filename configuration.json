@@ -20,11 +20,11 @@
     }
   },
   {
-    "key": "defaultZoneId",
+    "key": "defaultZoneIdType",
     "type": "input",
-    "defaultValue": "",
+    "defaultValue": "4",
     "templateOptions": {
-      "label": "Default ZoneId",
+      "label": "Default ZoneId Type",
       "description": "The default ZoneId",
       "required": true
     }
@@ -46,26 +46,6 @@
     "templateOptions": {
       "label": "Password",
       "type": "password",
-      "required": false
-    }
-  },
-  {
-    "key": "IsUpdatePerson",
-    "type": "checkbox",
-    "defaultValue": false,
-    "templateOptions": {
-      "label": "Toggle person update",
-      "description": "When toggled, persons in the target system will be updated",
-      "required": false
-    }
-  },
-  {
-    "key": "IsDebug",
-    "type": "checkbox",
-    "defaultValue": true,
-    "templateOptions": {
-      "label": "Toggle debug logging",
-      "description": "When toggled, debug logging will be displayed",
       "required": false
     }
   }

@@ -1,35 +1,32 @@
-# HelloID-Conn-Prov-Target-iloq
 
-| :warning: Warning |
-|:---------------------------|
-| Note that this connector is "a work in progress" and therefore not ready to use in your production environment. |
+# HelloID-Conn-Prov-Target-Iloq
 
-| :information_source: Information |
-|:---------------------------|
-| This repository contains the connector and configuration code only. The implementer is responsible to acquire the connection details such as username, password, certificate, etc. You might even need to sign a contract or agreement with the supplier before implementing this connector. Please contact the client's application manager to coordinate the connector requirements. |
-<br />
+> [!IMPORTANT]
+> This repository contains the connector and configuration code only. The implementer is responsible to acquire the connection details such as username, password, certificate, etc. You might even need to sign a contract or agreement with the supplier before implementing this connector. Please contact the client's application manager to coordinate the connector requirements.
+
 <p align="center">
   <img src="https://www.tools4ever.nl/connector-logos/iloq-logo.png">
 </p>
 
 ## Table of contents
 
-- [HelloID-Conn-Prov-Target-iloq](#helloid-conn-prov-target-iloq)
+- [HelloID-Conn-Prov-Target-Iloq](#helloid-conn-prov-target-Iloq)
   - [Table of contents](#table-of-contents)
   - [Introduction](#introduction)
   - [Getting started](#getting-started)
+    - [Provisioning PowerShell V2 connector](#provisioning-powershell-v2-connector)
+     - [Field mapping](#field-mapping)
+     - [Correlation configuration](#correlation-configuration)
     - [Connection settings](#connection-settings)
     - [Prerequisites](#prerequisites)
-      - [Creation / correlation process](#creation--correlation-process)
     - [Remarks](#remarks)
-      - [Permissions Remarks](#permissions-remarks)
+     - [Permission Remarkks](#permissions-remarks)
   - [Getting help](#getting-help)
   - [HelloID docs](#helloid-docs)
 
 ## Introduction
 
-_HelloID-Conn-Prov-Target-iloq_ is a _target_ connector. iLOQ provides a set of REST API's that allow you to programmatically interact with its data. The HelloID connector uses the API endpoints listed in the table below.
-
+_HelloID-Conn-Prov-Target-Iloq_ is a _target_ connector. _Iloq_ provides a set of REST API's that allow you to programmatically interact with its data. The HelloID connector uses the API endpoints listed in the table below.
 | Endpoint                                                    | Description                                           |
 | ----------------------------------------------------------- | ----------------------------------------------------- |
 | /api/v2/CreateSession                                       | Create session to make API requests                   |
@@ -43,7 +40,50 @@ _HelloID-Conn-Prov-Target-iloq_ is a _target_ connector. iLOQ provides a set of 
 | /api/v2/Keys/{keyId}/Return                                 | Return key with specific key id                       |
 | /api/v2/Persons/{personId}/CanDelete                        | Check if person selected by person id can be deleted  |
 
+The following lifecycle actions are available:
+
+| Action                 | Description                                      |
+| ---------------------- | ------------------------------------------------ |
+| create.ps1             | PowerShell _create_ lifecycle action             |
+| delete.ps1             | PowerShell _delete_ lifecycle action             |
+| disable.ps1            | PowerShell _disable_ lifecycle action            |
+| enable.ps1             | <enable action not available>      |
+| update.ps1             | PowerShell _update_ lifecycle action             |
+| permissions/groups/grantPermission.ps1    | PowerShell _grant_ lifecycle action              |
+| permissions/groups/revokePermission.ps1   | PowerShell _revoke_ lifecycle action             |
+| permissions/groups/permissions.ps1        | PowerShell _permissions_ lifecycle action        |
+| configuration.json     | Default _configuration.json_ |
+| fieldMapping.json      | Default _fieldMapping.json_   |
+
 ## Getting started
+
+### Provisioning PowerShell V2 connector
+
+#### Field mapping
+
+The field mapping can be imported by using the _fieldMapping.json_ file.
+
+#### Correlation configuration
+
+The correlation configuration is used to specify which properties will be used to match an existing account within _Iloq_ to a person in _HelloID_.
+
+To properly setup the correlation:
+
+1. Open the `Correlation` tab.
+
+2. Specify the following configuration:
+
+    | Setting                   | Value                             |
+    | ------------------------- | --------------------------------- |
+    | Enable correlation        | `True`                            |
+    | Person correlation field  | `ExternalId`                      |
+    | Account correlation field | `ExternalPersonId`                |
+
+
+> [!TIP]
+> _For more information on correlation, please refer to our correlation [documentation](https://docs.helloid.com/en/provisioning/target-systems/powershell-v2-target-systems/correlation.html) pages_.
+
+
 
 ### Connection settings
 
@@ -55,32 +95,27 @@ The following settings are required to connect to the API.
 | Password        | The Password to connect to the API      | Yes         |
 | CustomerCode    | The CustomerCode to connect to the API  | Yes         |
 | BaseUrl         | The URL to the API                      | Yes         |
+| Default ZoneID type| The type of the zoneID a new user is created in. e.g. 4 or 14 | Yes
 
 ### Prerequisites
+
  - The API requires an additional API iLOQ license, make sure you have the correct License.
- - Please make sure that the API user has the correct right, the user must be able to read all the data from all the userzones.
- - Before using this connector, make sure you have the appropriate API key to connect to the API.
+ - Please make sure that the API user has the correct rights, the user must be able to read all the data from all the userzones.
+
  - Ensure that the Concurrent Action limit is set to one, as the grant or revoke process for a single user cannot be performed simultaneously. It can result in occasional instances where permissions are not granted.
 
-#### Creation / correlation process
-
-A new functionality is the possibility to update the account in the target system during the correlation process. By default, this behavior is disabled. Meaning, the account will only be created or correlated.
-
-You can change this behavior in the configuration by selecting the IsUpdatePerson field in the configuration.
-
-> Be aware that this might have unexpected implications.
-
 ### Remarks
-- There is no enable script. Don't forget to give out the account_access entitlement otherwise you can't disable the user
-- When a new user is created, the fields: `eMail, PersonCode, Address` are mandatory.
-  Typically, this data comes from an external system. However, the address field can stay empty.
-- Keep in mind when revoke Access Keys of type Phone you cannot monitor the status of phone when returning it, for example when the phone is in flight mode
-- The ZoneId is mandatory when creating a new person. The ZoneId of Type 4 is marked as default, the correct ZoneId from iLOQ is fetched in function: 'Get-IloqZoneId'.
-- Leave the `Person_ID` field empty. The GUID for this is generated in the Create-Correlate
+
+
+- There is no enable script. This is because the disable script does effectively remove the accesskeys from the account, and the re-assigment is a manual process. Note that although there is no action in the target system associated with the "Account access" HelloId entitlement, this entitlement still must be granted, as the trigger for the disable action is the revocation of this entitlement.
+- When a new user is created, the fields: `eMail and PersonCode are mandatory. The field Person_ID is not specified in the HelloID field mapping, because it is automatically generated in the script, and stored as account reference. The other fields can be empty strings, but cannot be omitted. This is also the case for the update script.
+- Keep in mind when revoking Access Keys of type Phone you cannot monitor the status of phone when returning it, for example when the phone is in flight mode
+- The ZoneId is mandatory when creating a new person. The ZoneIdType of the ZoneId used as default when creating a user is specified in the configuration. This type may differ per Iloq environment. (e.g 4 or 14)), the actual ZoneId from iLOQ is fetched in function: 'Get-IloqZoneId'.
+
+
 - The Enddate of the AccessKey is kept in sync with the person's primary contract enddate to ensure that it is always up-to-date. An additional check is run in some sort of extra process in the following HelloId Actions: **Create, Update, Grant, and Revoke**. This check verifies if the accessKey enddate differs from the enddate of the primary contract, and if so, it updates the enddate on the access key. This is done on all the access keys assigned to the person. Because this process is slightly different from the normal Account LifeCycle or managing permissions, it does not throw termination errors but instead adds a warning to the process logging. (Of course, this can be changed.)
 - Please note that after updating the security access on the key with HelloID, the security accesses are granted in the system but are not directly synced to the actual key. This programming happens either by passing through an online reader (for example, an active door reader capable of syncing the latest changes) or by programming with a physical programming key.
 - There are two types of end dates that can be updated on an AccessKey. There is an ExpireDate and a Timelimit Slot. The ExpireDate is only an informational value, while the Timelimit slot actually prevents access whenever the end date is expired. The connector keeps both dates in sync with the primary contract end date, as already mentioned above.
-
 
 
 #### Permissions Remarks
@@ -99,8 +134,12 @@ The connector process for managing access keys involves the creation of user acc
  - After each change in Security Access permissions, the key needs to be ordered in order to make the new permission set available for ordering [More info Here](https://s5.iloq.com/iLOQPublicApiDoc/use_cases/iLOQ_ManageKeysSecurityAccessesRemotely.html). This can cause inconvenience whenever a permission is revoked and the CanOrder action fails. The webservice has already deleted the permission, so in the retry, the permission is already removed according to the API. This means that the key should always be ordered in the revoke action, even if the API indicates that the permission has already been removed.
  - The connector does support only locking systems that have zone functionality On
 
+
+
+
 ## Getting help
 
+> [!TIP]
 > _For more information on how to configure a HelloID PowerShell connector, please refer to our [documentation](https://docs.helloid.com/hc/en-us/articles/360012558020-Configure-a-custom-PowerShell-target-system) pages_
 
 > _For more information on how to configure a iLOQ connector, please refer to the iLOQ [documentation](https://s5.iloq.com/iLOQPublicApiDoc) pages_

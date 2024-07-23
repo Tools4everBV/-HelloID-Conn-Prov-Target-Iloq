@@ -1,25 +1,45 @@
-##################################################### 
-# HelloID-Conn-Prov-Target-iloq-Delete
-#
-# Version: 1.0.0
-#####################################################
-# Initialize default values
-$config = $configuration | ConvertFrom-Json
-$p = $person | ConvertFrom-Json
-$aRef = $AccountReference | ConvertFrom-Json
-$success = $false
-$auditLogs = [System.Collections.Generic.List[PSCustomObject]]::new()
+##################################################
+# HelloID-Conn-Prov-Target-Iloq-Delete
+# PowerShell V2
+##################################################
 
 # Enable TLS1.2
 [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor [System.Net.SecurityProtocolType]::Tls12
 
-# Set debug logging
-switch ($($config.IsDebug)) {
-    $true { $VerbosePreference = 'Continue' }
-    $false { $VerbosePreference = 'SilentlyContinue' }
+#region functions
+function Get-IloqResolvedURL {
+    [CmdletBinding()]
+    param (
+        [object]
+        $config
+    )
+    try {
+        [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor [System.Net.SecurityProtocolType]::Tls12
+        $headers = [System.Collections.Generic.Dictionary[string, string]]::new()
+        $headers.Add('Content-Type', 'application/json')
+        $headers.Add('SessionId', $SessionId)
+
+        $splatParams = @{
+            Uri         = "$($config.BaseUrl)/api/v2/Url/GetUrl"
+            Method      = 'POST'
+            ContentType = 'application/json'
+            Body        = @{
+                'CustomerCode' = $($config.CustomerCode)
+            }  | ConvertTo-Json
+        }
+        $resolvedUrl = Invoke-RestMethod @splatParams -Verbose:$false
+
+        if ([string]::IsNullOrEmpty($resolvedUrl) ) {
+            Write-Information "No Resolved - URL found, keep on using the URL provided: $($config.BaseUrl)."
+        } else {
+            Write-Information "Resolved - URL found [$resolvedUrl , Using the found url to execute the subsequent requests."
+            $config.BaseUrl = $resolvedUrl
+        }
+    } catch {
+        $PSCmdlet.ThrowTerminatingError($_)
+    }
 }
 
-#region functions
 function Get-IloqSessionId {
     [CmdletBinding()]
     param (
@@ -33,10 +53,10 @@ function Get-IloqSessionId {
         $headers = [System.Collections.Generic.Dictionary[string, string]]::new()
         $headers.Add('Content-Type', 'application/json')
         $params = @{
-            Uri    = "$($config.BaseUrl)/api/v2/CreateSession"
-            Method = 'POST'
+            Uri     = "$($config.BaseUrl)/api/v2/CreateSession"
+            Method  = 'POST'
             Headers = $headers
-            Body = @{
+            Body    = @{
                 'CustomerCode' = $($config.CustomerCode)
                 'UserName'     = $($config.UserName)
                 'Password'     = $($config.Password)
@@ -48,6 +68,7 @@ function Get-IloqSessionId {
         $PSCmdlet.ThrowTerminatingError($_)
     }
 }
+
 
 function Get-IloqLockGroupId {
     [CmdletBinding()]
@@ -76,7 +97,6 @@ function Get-IloqLockGroupId {
         $PSCmdlet.ThrowTerminatingError($_)
     }
 }
-
 function Set-IloqLockGroup {
     [CmdletBinding()]
     param (
@@ -100,45 +120,12 @@ function Set-IloqLockGroup {
             Uri     = "$($config.BaseUrl)/api/v2/SetLockGroup"
             Method  = 'POST'
             Headers = $headers
-            Body = @{
+            Body    = @{
                 'LockGroup_ID' = $LockGroupId
             } | ConvertTo-Json
         }
         $response = Invoke-RestMethod @params -Verbose:$false
         Write-Output $response.LockGroup_ID
-    } catch {
-        $PSCmdlet.ThrowTerminatingError($_)
-    }
-}
-
-function Set-IloqResolvedURL {
-    [CmdletBinding()]
-    param (
-        [object]
-        $config
-    )
-    try {
-        [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor [System.Net.SecurityProtocolType]::Tls12
-        $headers = [System.Collections.Generic.Dictionary[string, string]]::new()
-        $headers.Add('Content-Type', 'application/json')
-        $headers.Add('SessionId', $SessionId)
-
-        $splatParams = @{
-            Uri         = "$($config.BaseUrl)/api/v2/Url/GetUrl"
-            Method      = 'POST'
-            ContentType = 'application/json'
-            Body        = @{
-                'CustomerCode' = $($config.CustomerCode)
-            }  | ConvertTo-Json
-        }
-        $resolvedUrl = Invoke-RestMethod @splatParams -Verbose:$false
-
-        if ([string]::IsNullOrEmpty($resolvedUrl) ) {
-            Write-Verbose "No Resolved - URL found, keep on using the URL provided: $($config.BaseUrl)."
-        } else {
-            Write-Verbose "Resolved - URL found [$resolvedUrl , Using the found url to execute the following requests."
-            $config.BaseUrl =  $resolvedUrl
-        }
     } catch {
         $PSCmdlet.ThrowTerminatingError($_)
     }
@@ -172,53 +159,63 @@ function Resolve-IloqError {
 #endregion
 
 try {
+    # Verify if [aRef] has a value
+    if ([string]::IsNullOrEmpty($($actionContext.References.Account))) {
+        throw 'The account reference could not be found'
+    }
+
+    Write-Information "Verifying if a Iloq account for [$($personContext.Person.DisplayName)] exists"
+
     # First step is to get the correct url to use for the rest of the API calls.
-    $null =  Set-IloqResolvedURL -Config $config
+    $null = Get-IloqResolvedURL -Config $actionContext.Configuration
 
     # Get the iLOQ sessionId
-    $sessionId = Get-IloqSessionId -Config $config
+    $sessionId = Get-IloqSessionId -Config $actionContext.Configuration
 
     # Get the iLOQ lockGroupId
-    $lockGroupId = Get-IloqLockGroupId -Config $config -SessionId $sessionId
+    $lockGroupId = Get-IloqLockGroupId -Config $actionContext.Configuration -SessionId $sessionId
 
     # Set the iLOQ lockGroup in order to make authenticated calls
-    $null = Set-IloqLockGroup -Config $config -SessionId $sessionId -LockGroupId $lockGroupId
+    $null = Set-IloqLockGroup -Config $actionContext.Configuration -SessionId $sessionId -LockGroupId $lockGroupId
 
-    Write-Verbose 'Adding authorization headers'
     $headers = [System.Collections.Generic.Dictionary[string, string]]::new()
     $headers.Add('Content-Type', 'application/json; charset=utf-8')
     $headers.Add('SessionId', $sessionId)
 
     try {
-        Write-Verbose "verifying if a iLOQ account for [$($p.Name.GivenName)] exists"
-
         $splatParams = @{
-            Uri         = "$($config.BaseUrl)/api/v2/Persons/$($aRef)"
+            Uri         = "$($actionContext.Configuration.BaseUrl)/api/v2/Persons/$($actionContext.References.Account)"
             Method      = 'GET'
             Headers     = $headers
             ContentType = 'application/json; charset=utf-8'
         }
 
-        $responseUser = Invoke-RestMethod @splatParams -Verbose:$false
-        $action = 'Found'
-        $dryRunMessage = "Delete iLOQ account for: [$($p.Name.GivenName)] will be executed during enforcement"
+        $correlatedAccount = Invoke-RestMethod @splatParams -Verbose:$false
+    } catch {
+        $correlatedAccount = $null
     }
-    catch{
+
+    if ($null -ne $correlatedAccount) {
+        $action = 'DeleteAccount'
+        $dryRunMessage = "Delete Iloq account: [$($actionContext.References.Account)] for person: [$($personContext.Person.DisplayName)] will be executed during enforcement"
+    } else {
         $action = 'NotFound'
-        $dryRunMessage = "iLOQ account for: [$($p.Name.GivenName)] not found. Possibly already deleted. Skipping action "    
+        $dryRunMessage = "Iloq account: [$($actionContext.References.Account)] for person: [$($personContext.Person.DisplayName)] could not be found, possibly indicating that it may already have been deleted"
     }
 
-    # Add an auditMessage showing what will happen during enforcement
-    if ($dryRun -eq $true) {
-        Write-Warning "[dryrun] $($dryRunMessage)"
+    # Add a message and the result of each of the validations showing what will happen during enforcement
+    if ($actionContext.DryRun -eq $true) {
+        Write-Information "[DryRun] $dryRunMessage"
     }
 
-    if (-not($dryRun -eq $true)) {
+    # Process
+    if (-not($actionContext.DryRun -eq $true)) {
         switch ($action) {
-            'Found' { 
-                Write-Verbose "Deleting iLOQ account with accountReference: [$aRef]"
+            'DeleteAccount' {
+                Write-Information "Deleting Iloq account with accountReference: [$($actionContext.References.Account)]"
+
                 $splatParams = @{
-                    Uri         = "$($config.BaseUrl)/api/v2/Persons/$($aRef)/CanDelete"
+                    Uri         = "$($actionContext.Configuration.BaseUrl)/api/v2/Persons/$($actionContext.References.Account)/CanDelete"
                     Method      = 'GET'
                     Headers     = $headers
                     ContentType = 'application/json; charset=utf-8'
@@ -227,118 +224,115 @@ try {
                 $canDeleteResult = Invoke-RestMethod @splatParams -Verbose:$false
 
                 switch ($canDeleteResult) {
-                    0 {  
+                    0 {
                         $splatParams = @{
-                            Uri         = "$($config.BaseUrl)/api/v2/Persons/$($aRef)"
+                            Uri         = "$($actionContext.Configuration.BaseUrl)/api/v2/Persons/$($actionContext.References.Account)"
                             Method      = 'DEL'
                             Headers     = $headers
                             ContentType = 'application/json; charset=utf-8'
                         }
-        
+
                         $null = Invoke-RestMethod @splatParams -Verbose:$false
-                        
-                        $auditLogs.Add([PSCustomObject]@{
-                            Message = "Account: $($aRef). Delete account was successfull"
+
+                        $outputContext.Success = $true
+                        $outputContext.AuditLogs.Add([PSCustomObject]@{
+                            Message = "Account: $($actionContext.References.Account). Delete account was successful"
                             IsError = $false
                         })
                     }
                     1 {
-                        $auditLogs.Add([PSCustomObject]@{
-                            Message = "Account: $($aRef). Has active keys which means keys must be returned before deleting person."
+                         $outputContext.AuditLogs.Add([PSCustomObject]@{
+                            Message = "Account: $($actionContext.References.Account). Has active keys which means keys must be returned before deleting person."
                             IsError = $true
                         })
                     }
                     2{
-                        $auditLogs.Add([PSCustomObject]@{
-                            Message = "Account: $($aRef). Has active user account in the locking system. Can't be deleted through API."
+                         $outputContext.AuditLogs.Add([PSCustomObject]@{
+                            Message = "Account: $($actionContext.References.Account). Has active user account in the locking system. Can't be deleted through API."
                             IsError = $true
                         })
                     }
                     3{
-                        $auditLogs.Add([PSCustomObject]@{
-                            Message = "Account: $($aRef). Has linked programming keys or network module. Remove this links before deleting person."
+                         $outputContext.AuditLogs.Add([PSCustomObject]@{
+                            Message = "Account: $($actionContext.References.Account). Has linked programming keys or network module. Remove this links before deleting person."
                             IsError = $true
                         })
                     }
                     4{
-                        $auditLogs.Add([PSCustomObject]@{
-                            Message = "Account: $($aRef). Has active user account in another locking system."
+                         $outputContext.AuditLogs.Add([PSCustomObject]@{
+                            Message = "Account: $($actionContext.References.Account). Has active user account in another locking system."
                             IsError = $true
                         })
                     }
                     5{
-                        $auditLogs.Add([PSCustomObject]@{
-                            Message = "Account: $($aRef). Is the same user currently logged in."
+                         $outputContext.AuditLogs.Add([PSCustomObject]@{
+                            Message = "Account: $($actionContext.References.Account). Is the same user currently logged in."
                             IsError = $true
                         })
                     }
                     6{
-                        $auditLogs.Add([PSCustomObject]@{
-                            Message = "Account: $($aRef). is S50 service user. This user can't be deleted."
+                         $outputContext.AuditLogs.Add([PSCustomObject]@{
+                            Message = "Account: $($actionContext.References.Account). is S50 service user. This user can't be deleted."
                             IsError = $true
                         })
                     }
                     7{
-                        $auditLogs.Add([PSCustomObject]@{
-                            Message = "Account: $($aRef). Has calendar data orders which must be deleted first."
+                         $outputContext.AuditLogs.Add([PSCustomObject]@{
+                            Message = "Account: $($actionContext.References.Account). Has calendar data orders which must be deleted first."
                             IsError = $true
                         })
                     }
                     8{
-                        $auditLogs.Add([PSCustomObject]@{
-                            Message = "Account: $($aRef). User has no right to delete person users."
+                         $outputContext.AuditLogs.Add([PSCustomObject]@{
+                            Message = "Account: $($actionContext.References.Account). User has no right to delete person users."
                             IsError = $true
                         })
                     }
                     9{
-                        $auditLogs.Add([PSCustomObject]@{
-                            Message = "Account: $($aRef). Is last normal Manager user, it cannot be deleted otherwise only external users remain in system."
+                         $outputContext.AuditLogs.Add([PSCustomObject]@{
+                            Message = "Account: $($actionContext.References.Account). Is last normal Manager user, it cannot be deleted otherwise only external users remain in system."
                             IsError = $true
                         })
                     }
                     -1{
-                        $auditLogs.Add([PSCustomObject]@{
-                            Message = "Account: $($aRef). Error occured. please check the api reference: https://s5.iloq.com/iLOQPublicApiDoc#operation/Persons_CanDelete"
+                         $outputContext.AuditLogs.Add([PSCustomObject]@{
+                            Message = "Account: $($actionContext.References.Account). Error occured. please check the api reference: https://s5.iloq.com/iLOQPublicApiDoc#operation/Persons_CanDelete"
                             IsError = $true
                         })
                     }
                     Default {
-                        $auditLogs.Add([PSCustomObject]@{
+                         $outputContext.AuditLogs.Add([PSCustomObject]@{
                                 Message = "Unkown return type from 'CanDelete' please check the api reference: https://s5.iloq.com/iLOQPublicApiDoc#operation/Persons_CanDelete"
                                 IsError = $true
                             })
                     }
                 }
-                $success = $true
+                break
             }
             'NotFound' {
-                $success = $true
-                $auditLogs.Add([PSCustomObject]@{
-                    Message = $dryRunMessage
-                    IsError = $false
-                })
+                $outputContext.Success = $true
+                $outputContext.AuditLogs.Add([PSCustomObject]@{
+                        Message = "Iloq account: [$($actionContext.References.Account)] for person: [$($personContext.Person.DisplayName)] could not be found, possibly indicating that it possibly indicating that it may already have been deleted"
+                        IsError = $false
+                    })
+                break
             }
         }
     }
 } catch {
-    $success = $false
+    $outputContext.Success = $false
     $ex = $PSItem
     if ($($ex.Exception.GetType().FullName -eq 'Microsoft.PowerShell.Commands.HttpResponseException') -or
         $($ex.Exception.GetType().FullName -eq 'System.Net.WebException')) {
         $errorObj = Resolve-IloqError -ErrorObject $ex
-        $errorMessage = "Could not delete iLOQ account. Error: $($errorObj.ErrorMessage)"
-    } else {
-        $errorMessage = "Could not delete iLOQ account. Error: $($ex.Exception.Message)"
+        $auditMessage = "Could not delete Iloq account. Error: $($errorObj.FriendlyMessage)"
+        Write-Warning "Error at Line '$($errorObj.ScriptLineNumber)': $($errorObj.Line). Error: $($errorObj.ErrorDetails)"
+    }  else {
+        $auditMessage = "Could not delete Iloq account. Error: $($_.Exception.Message)"
+        Write-Warning "Error at Line '$($ex.InvocationInfo.ScriptLineNumber)': $($ex.InvocationInfo.Line). Error: $($ex.Exception.Message)"
     }
-    Write-Verbose $errorMessage
-    $auditLogs.Add([PSCustomObject]@{
-            Message = $errorMessage
+    $outputContext.AuditLogs.Add([PSCustomObject]@{
+            Message = $auditMessage
             IsError = $true
         })
-} finally {
-    $result = [PSCustomObject]@{
-        Success   = $success
-        Auditlogs = $auditLogs
-    }
-    Write-Output $result | ConvertTo-Json -Depth 10
 }
